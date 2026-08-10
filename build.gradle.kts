@@ -66,6 +66,39 @@ tasks.named("assemble") {
     dependsOn(installerZip)
 }
 
+// Publishing has to be a single command, or it gets skipped and users end up
+// installing a build older than the bug you just fixed.
+//
+//   ./gradlew publishInstaller
+//
+// Replaces the assets on the "v<version>" release, creating it if needed, so
+// the /releases/latest/download/... URL the bootstrap scripts use always
+// resolves to the current build.
+tasks.register<Exec>("publishInstaller") {
+    group = "distribution"
+    description = "Builds the installer zip and publishes it to GitHub Releases."
+    dependsOn(installerZip)
+
+    val tag = "v$version"
+    val zip = installerZip.flatMap { it.archiveFile }
+
+    commandLine(
+        "bash", "-c",
+        """
+        set -euo pipefail
+        if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" "${'$'}1" --clobber
+        else
+            gh release create "$tag" "${'$'}1" \
+                --title "$tag" \
+                --notes "Run the installer: see https://github.com/Th7bo/modupdater-cli#install"
+        fi
+        """.trimIndent(),
+        "--",
+        zip.get().asFile.absolutePath
+    )
+}
+
 // Single runnable JAR. Done with a plain Jar task rather than a shading plugin:
 // there is exactly one dependency to bundle, and this avoids pinning a plugin
 // version against Gradle's own release cycle.

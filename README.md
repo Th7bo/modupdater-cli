@@ -14,10 +14,25 @@ Standalone Java — no Minecraft dependency, no mod to install. It runs from you
 
 ## Install
 
-Get `modupdater-installer.zip`, extract it **somewhere you'll keep it**, and run the installer:
+One command. It downloads the latest version and walks you through the rest.
 
-- **Windows** — double-click `install.bat`
-- **Linux / macOS** — `./install.sh` in a terminal
+**Linux / macOS**
+
+```bash
+curl -fsSL https://mod.th7bo.dev/install | bash
+```
+
+**Windows** — in PowerShell
+
+```powershell
+irm https://mod.th7bo.dev/install.ps1 | iex
+```
+
+<details>
+<summary>Or install from the zip by hand</summary>
+
+Download `modupdater-installer.zip` from [the latest release](https://github.com/Th7bo/modupdater-cli/releases/latest), extract it **somewhere you'll keep it**, and run `install.sh` (Linux/macOS) or double-click `install.bat` (Windows).
+</details>
 
 It finds your instances, shows them as a list, and asks which to set up:
 
@@ -141,8 +156,16 @@ Logs go to `mods/.modupdater/log.txt`. The token is redacted from every line.
 ```bash
 ./gradlew build      # runs the tests, and produces both of:
                      #   build/libs/modupdater-cli-<version>.jar
-                     #   build/dist/modupdater-installer.zip   <- hand this out
+                     #   build/dist/modupdater-installer.zip
 ```
+
+## Release
+
+```bash
+./gradlew publishInstaller
+```
+
+Builds the zip and attaches it to the `v<version>` GitHub release, creating it if needed and replacing the asset if it already exists. The bootstrap scripts fetch `/releases/latest/download/modupdater-installer.zip`, so publishing is what makes a fix reach people — bump `version` in `build.gradle.kts` first if the release already exists and you want a new tag.
 
 ## Not supported
 
