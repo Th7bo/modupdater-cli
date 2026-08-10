@@ -40,6 +40,32 @@ tasks.test {
     }
 }
 
+// What you actually hand to someone: the JAR, the hook scripts, the installer,
+// and the README, in one zip. The JAR is renamed to the stable name the scripts
+// look for, so the version never has to be edited into them.
+val installerZip = tasks.register<Zip>("installerZip") {
+    group = "distribution"
+    description = "Builds the zip to hand to users: jar + hook scripts + installer."
+
+    archiveFileName = "modupdater-installer.zip"
+    destinationDirectory = layout.buildDirectory.dir("dist")
+
+    from(tasks.jar) {
+        rename { "modupdater-cli.jar" }
+    }
+    from(layout.projectDirectory.dir("scripts"))
+    from(layout.projectDirectory.file("README.md"))
+
+    // The shell scripts must stay executable after unzipping on Linux/macOS.
+    filesMatching(listOf("*.sh")) {
+        permissions { unix("rwxr-xr-x") }
+    }
+}
+
+tasks.named("assemble") {
+    dependsOn(installerZip)
+}
+
 // Single runnable JAR. Done with a plain Jar task rather than a shading plugin:
 // there is exactly one dependency to bundle, and this avoids pinning a plugin
 // version against Gradle's own release cycle.

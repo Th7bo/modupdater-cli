@@ -14,9 +14,37 @@ Standalone Java — no Minecraft dependency, no mod to install. It runs from you
 
 ## Install
 
-1. Download `modupdater-cli.jar` and the wrapper script for your platform into a folder of your choice, e.g. `~/.local/share/modupdater/`.
-2. Make the script executable: `chmod +x modupdater.sh`
-3. Write your API token where the updater can find it:
+Get `modupdater-installer.zip`, extract it **somewhere you'll keep it**, and run the installer:
+
+- **Windows** — double-click `install.bat`
+- **Linux / macOS** — `./install.sh` in a terminal
+
+It finds your instances, shows them as a list, and asks which to set up:
+
+```
+Found 3 instance(s):
+
+   1) [Prism] Skyblock New  (MC 1.21.11)
+   2) [Prism] Th7bo  (MC 1.21.6)
+   3) [Modrinth] Fabric 1.21.4  (MC unknown)
+
+Which one? (number, or several like 1,3, or "all"):
+```
+
+Then it asks for the server address and your access token, writes everything into place, and — for Prism — fills in the launcher hooks for you. Finally it checks the connection so you know it works before you launch.
+
+Ask whoever runs the server for the **server address** and the **access token**.
+
+> Close Prism before running the installer, and reopen it afterwards. Prism rewrites `instance.cfg` when it exits and would overwrite the change.
+
+Nothing else to do — next time you press Play, you'll be asked about any updates.
+
+### If your launcher isn't found
+
+The installer looks in the usual locations for Prism, MultiMC and Modrinth App. If you keep instances elsewhere, set it up by hand:
+
+1. Put `modupdater-cli.jar` and the wrapper script somewhere permanent.
+2. Write your token, readable only by you:
 
    ```bash
    mkdir -p /path/to/instance/minecraft/mods/.modupdater
@@ -26,7 +54,7 @@ Standalone Java — no Minecraft dependency, no mod to install. It runs from you
 
    The token is never accepted as a command-line flag — process arguments are readable by every process on the machine.
 
-4. Create `modupdater.properties` in the **instance** directory (one level above `mods/`):
+3. Create `modupdater.properties` in the **instance** directory (one level above `mods/`):
 
    ```properties
    base.url=https://mods.example.com
@@ -37,7 +65,11 @@ Standalone Java — no Minecraft dependency, no mod to install. It runs from you
 
    `mc.version` must be the exact Minecraft version of the instance. It is matched literally against what the server publishes, so `1.21.4` will not match a build published for `1.21.5`.
 
+4. Add the hooks yourself, as below.
+
 ## Wire it into your launcher
+
+The installer does this for Prism. Do it by hand for Modrinth App, or if you skipped that step.
 
 ### Prism Launcher
 
@@ -107,7 +139,9 @@ Logs go to `mods/.modupdater/log.txt`. The token is redacted from every line.
 ## Build
 
 ```bash
-./gradlew build      # runs the tests, produces build/libs/modupdater-cli-<version>.jar
+./gradlew build      # runs the tests, and produces both of:
+                     #   build/libs/modupdater-cli-<version>.jar
+                     #   build/dist/modupdater-installer.zip   <- hand this out
 ```
 
 ## Not supported

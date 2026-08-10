@@ -8,6 +8,8 @@ import dev.th7bo.modupdater.instance.InstalledMod;
 import dev.th7bo.modupdater.instance.InstanceScanner;
 import dev.th7bo.modupdater.manifest.FetchResult;
 import dev.th7bo.modupdater.manifest.ManifestClient;
+import dev.th7bo.modupdater.setup.Instance;
+import dev.th7bo.modupdater.setup.InstanceDiscovery;
 import dev.th7bo.modupdater.ui.DialogViewModel;
 import dev.th7bo.modupdater.ui.UpdateDialog;
 import dev.th7bo.modupdater.util.Log;
@@ -54,11 +56,23 @@ public final class Main {
         return switch (command) {
             case "check" -> check(config);
             case "apply" -> apply(config);
+            case "list-instances" -> listInstances();
             default -> {
                 Log.warn("unknown command '" + command + "', expected 'check' or 'apply'");
                 yield OK;
             }
         };
+    }
+
+    /**
+     * Prints discovered instances as TSV for the installer scripts. Straight to
+     * stdout rather than through {@link Log}, since it is machine-read.
+     */
+    private static int listInstances() {
+        for (Instance instance : InstanceDiscovery.forThisMachine().discover()) {
+            System.out.println(instance.toTsv());
+        }
+        return OK;
     }
 
     private static int check(Config config) {
