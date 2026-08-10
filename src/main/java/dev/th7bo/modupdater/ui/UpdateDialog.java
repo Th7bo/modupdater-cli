@@ -18,6 +18,9 @@ import javax.swing.WindowConstants;
 import javax.swing.table.AbstractTableModel;
 import java.awt.BorderLayout;
 import java.awt.Dimension;
+import java.awt.MouseInfo;
+import java.awt.PointerInfo;
+import java.awt.Rectangle;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -135,15 +138,19 @@ public final class UpdateDialog {
         dialog.add(buttons, BorderLayout.SOUTH);
         dialog.setPreferredSize(new Dimension(940, 380));
         dialog.pack();
-        dialog.setLocationRelativeTo(null);
+        placeOnActiveScreen(dialog);
 
-        // Best effort at being noticed. A tiling WM may still place this on the
-        // workspace it considers active rather than the one in front of the
-        // user, which is why the timeout below exists and why the caller logs
-        // that an answer is being waited for.
         dialog.setAlwaysOnTop(true);
-        dialog.toFront();
-        dialog.requestFocus();
+
+        // toFront and requestFocus do nothing before the window exists on
+        // screen, and setVisible on a modal dialog does not return until it is
+        // dismissed — so raise it just after it appears.
+        Timer raise = new Timer(150, e -> {
+            dialog.toFront();
+            dialog.requestFocus();
+        });
+        raise.setRepeats(false);
+        raise.start();
 
         Timer timeout = new Timer(ANSWER_TIMEOUT_MS, e -> {
             Log.warn("no answer after " + (ANSWER_TIMEOUT_MS / 1000)
@@ -157,6 +164,33 @@ public final class UpdateDialog {
         timeout.stop();
 
         return choice.get();
+    }
+
+    /**
+     * Centres the dialog on the screen containing the mouse pointer, rather than
+     * on the default screen device.
+     *
+     * <p>With several monitors, the default device is whichever one the display
+     * server happens to list first — on a tiling window manager that also decides
+     * which workspace the window is bound to, so the prompt can open on a
+     * monitor the user isn't looking at and the launch appears to hang. The
+     * pointer is the best available guess at where they actually are.
+     */
+    private static void placeOnActiveScreen(JDialog dialog) {
+        try {
+            PointerInfo pointer = MouseInfo.getPointerInfo();
+            if (pointer == null || pointer.getDevice() == null) {
+                dialog.setLocationRelativeTo(null);
+                return;
+            }
+
+            Rectangle screen = pointer.getDevice().getDefaultConfiguration().getBounds();
+            dialog.setLocation(
+                    screen.x + (screen.width - dialog.getWidth()) / 2,
+                    screen.y + (screen.height - dialog.getHeight()) / 2);
+        } catch (RuntimeException e) {
+            dialog.setLocationRelativeTo(null);
+        }
     }
 
     private static final class ModTableModel extends AbstractTableModel {
