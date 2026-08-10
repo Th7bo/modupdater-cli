@@ -1,0 +1,13 @@
+.gradle/
+build/
+*.class
+
+# Local editor state
+.idea/
+*.iml
+.vscode/
+
+# Never commit a token
+token
+*.token
+modupdater.properties
