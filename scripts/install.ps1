@@ -94,15 +94,59 @@ if ($selection -eq 'all') {
 
 # ── Server details ──────────────────────────────────────────────────────────
 
-Write-Host ''
-$baseUrl = Read-Host 'Server address (e.g. https://mods.example.com)'
-if (-not $baseUrl) { Stop-With 'A server address is required.' }
-$baseUrl = $baseUrl.TrimEnd('/')
+$settingsFile = Join-Path $installDir 'settings.properties'
+$savedTokenFile = Join-Path $installDir 'token'
 
-$secure = Read-Host 'Access token (paste it - it will not be shown)' -AsSecureString
-$token = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
-    [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure))
-if (-not $token) { Stop-With 'A token is required.' }
+function Read-Property ($file, $key) {
+    if (-not (Test-Path -LiteralPath $file)) { return $null }
+    foreach ($line in Get-Content -LiteralPath $file) {
+        if ($line -match "^$key=(.*)$") { return $Matches[1] }
+    }
+    return $null
+}
+
+$savedUrl = Read-Property $settingsFile 'base\.url'
+$savedToken = if (Test-Path -LiteralPath $savedTokenFile) {
+    (Get-Content -LiteralPath $savedTokenFile -Raw).Trim()
+} else { $null }
+
+# Fall back to an instance configured earlier - by a previous version of this
+# installer, or by hand - so nobody is asked to dig out their token twice.
+foreach ($idx in $chosen) {
+    $gd = $instances[$idx].GameDir
+    if (-not $savedUrl) { $savedUrl = Read-Property (Join-Path $gd 'modupdater.properties') 'base\.url' }
+    if (-not $savedToken) {
+        $t = Join-Path $gd 'mods\.modupdater\token'
+        if (Test-Path -LiteralPath $t) { $savedToken = (Get-Content -LiteralPath $t -Raw).Trim() }
+    }
+}
+
+$baseUrl = $null
+$token = $null
+
+if ($savedUrl -and $savedToken) {
+    Write-Host ''
+    Write-Host 'Found existing settings:'
+    Write-Host "  Server: $savedUrl"
+    Write-Host '  Token:  saved'
+    $reply = Read-Host 'Use these? [Y/n]'
+    if ($reply -notmatch '^[Nn]') {
+        $baseUrl = $savedUrl
+        $token = $savedToken
+    }
+}
+
+if (-not $baseUrl) {
+    Write-Host ''
+    $baseUrl = Read-Host 'Server address (e.g. https://mods.example.com)'
+    if (-not $baseUrl) { Stop-With 'A server address is required.' }
+    $baseUrl = $baseUrl.TrimEnd('/')
+
+    $secure = Read-Host 'Access token (paste it - it will not be shown)' -AsSecureString
+    $token = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
+        [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure))
+    if (-not $token) { Stop-With 'A token is required.' }
+}
 
 # ── Install the shared files ────────────────────────────────────────────────
 
@@ -125,6 +169,15 @@ foreach ($mode in @('check', 'apply')) {
         'exit /b %errorlevel%'
     )
 }
+
+# Remembered centrally so setting up another instance later asks nothing.
+Set-Content -LiteralPath $settingsFile -Value "base.url=$baseUrl" -Encoding UTF8
+[IO.File]::WriteAllText($savedTokenFile, $token)
+$savedAcl = Get-Acl $savedTokenFile
+$savedAcl.SetAccessRuleProtection($true, $false)
+$savedAcl.SetAccessRule((New-Object Security.AccessControl.FileSystemAccessRule(
+    $env:USERNAME, 'FullControl', 'Allow')))
+Set-Acl -Path $savedTokenFile -AclObject $savedAcl
 
 Write-Ok "Installed the updater into $installDir"
 
@@ -166,9 +219,15 @@ foreach ($idx in $chosen) {
 
     $version = $inst.Version
     if ($version -eq 'unknown') {
-        # Modrinth App keeps the game version in a database we don't read.
-        $version = Read-Host '  Which Minecraft version is this instance? (e.g. 1.21.4)'
-        if (-not $version) { Write-Warn '  Skipped - no version given.'; continue }
+        # Modrinth App keeps the game version in a database we don't read. If
+        # this instance was set up before, reuse that answer rather than asking.
+        $version = Read-Property (Join-Path $inst.GameDir 'modupdater.properties') 'mc\.version'
+        if ($version) {
+            Write-Host "  Using the Minecraft version from last time: $version"
+        } else {
+            $version = Read-Host '  Which Minecraft version is this instance? (e.g. 1.21.4)'
+            if (-not $version) { Write-Warn '  Skipped - no version given.'; continue }
+        }
     }
 
     $modsDir = Join-Path $inst.GameDir 'mods'

@@ -109,16 +109,56 @@ fi
 
 # ── Server details ──────────────────────────────────────────────────────────
 
-echo
-printf 'Server address (e.g. https://mods.example.com): '
-read -r base_url
-[ -n "$base_url" ] || die "A server address is required."
-base_url="${base_url%/}"
+SETTINGS_FILE="$INSTALL_DIR/settings.properties"
+SAVED_TOKEN_FILE="$INSTALL_DIR/token"
 
-printf 'Access token (paste it — it will not be shown): '
-read -rs token
-echo
-[ -n "$token" ] || die "A token is required."
+read_property() {
+    [ -f "$2" ] || return 0
+    sed -n "s/^$1=//p" "$2" | head -1
+}
+
+saved_url=""
+saved_token=""
+
+[ -f "$SETTINGS_FILE" ] && saved_url="$(read_property 'base\.url' "$SETTINGS_FILE")"
+[ -f "$SAVED_TOKEN_FILE" ] && saved_token="$(cat "$SAVED_TOKEN_FILE")"
+
+# Fall back to an instance configured earlier — by a previous version of this
+# installer, or by hand — so nobody is asked to dig out their token twice.
+for idx in "${chosen[@]}"; do
+    gd="${gamedirs[$idx]}"
+    [ -n "$saved_url" ] || saved_url="$(read_property 'base\.url' "$gd/modupdater.properties")"
+    [ -n "$saved_token" ] || { [ -f "$gd/mods/.modupdater/token" ] && saved_token="$(cat "$gd/mods/.modupdater/token")"; }
+done
+
+base_url=""
+token=""
+
+if [ -n "$saved_url" ] && [ -n "$saved_token" ]; then
+    echo
+    echo "Found existing settings:"
+    echo "  Server: $saved_url"
+    echo "  Token:  saved"
+    printf 'Use these? [Y/n]: '
+    read -r reply
+    case "$reply" in
+        [Nn]*) ;;
+        *) base_url="$saved_url"; token="$saved_token" ;;
+    esac
+fi
+
+if [ -z "$base_url" ]; then
+    echo
+    printf 'Server address (e.g. https://mods.example.com): '
+    read -r base_url
+    [ -n "$base_url" ] || die "A server address is required."
+    base_url="${base_url%/}"
+
+    printf 'Access token (paste it — it will not be shown): '
+    read -rs token
+    echo
+    [ -n "$token" ] || die "A token is required."
+fi
 
 # ── Install the shared files ────────────────────────────────────────────────
 
@@ -140,6 +180,12 @@ for hook_mode in check apply; do
     printf '#!/usr/bin/env bash\nexec "%s" %s\n' "$INSTALL_DIR/modupdater.sh" "$hook_mode" > "$hook_script"
     chmod +x "$hook_script"
 done
+
+# Remembered centrally so setting up another instance later asks nothing. The
+# token is already on disk per instance; this copy carries the same 0600.
+printf 'base.url=%s\n' "$base_url" > "$SETTINGS_FILE"
+printf '%s' "$token" > "$SAVED_TOKEN_FILE"
+chmod 600 "$SAVED_TOKEN_FILE"
 
 ok "Installed the updater into $INSTALL_DIR"
 
@@ -181,10 +227,17 @@ for idx in "${chosen[@]}"; do
     bold "Setting up: $name"
 
     if [ "$version" = "unknown" ]; then
-        # Modrinth App keeps the game version in a database we don't read, so ask.
-        printf '  Which Minecraft version is this instance? (e.g. 1.21.4): '
-        read -r version
-        [ -n "$version" ] || { warn "  Skipped — no version given."; continue; }
+        # Modrinth App keeps the game version in a database we don't read. If
+        # this instance was set up before, reuse that answer rather than asking
+        # for it again.
+        version="$(read_property 'mc\.version' "$gamedir/modupdater.properties")"
+        if [ -n "$version" ]; then
+            echo "  Using the Minecraft version from last time: $version"
+        else
+            printf '  Which Minecraft version is this instance? (e.g. 1.21.4): '
+            read -r version
+            [ -n "$version" ] || { warn "  Skipped — no version given."; continue; }
+        fi
     fi
 
     mods_dir="$gamedir/mods"
