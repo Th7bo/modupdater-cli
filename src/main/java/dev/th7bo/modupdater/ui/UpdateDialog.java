@@ -1,6 +1,7 @@
 package dev.th7bo.modupdater.ui;
 
 import dev.th7bo.modupdater.diff.UpdateCandidate;
+import dev.th7bo.modupdater.util.Log;
 
 import javax.swing.BorderFactory;
 import javax.swing.Box;
@@ -12,6 +13,7 @@ import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTable;
 import javax.swing.SwingUtilities;
+import javax.swing.Timer;
 import javax.swing.WindowConstants;
 import javax.swing.table.AbstractTableModel;
 import java.awt.BorderLayout;
@@ -34,6 +36,17 @@ public final class UpdateDialog {
         record Abort() implements Choice {
         }
     }
+
+    /**
+     * How long to wait for an answer before launching unchanged.
+     *
+     * <p>A tiling window manager can put this dialog on a workspace the user
+     * isn't looking at, and the launcher blocks on the pre-launch hook until it
+     * is answered — which is indistinguishable from a frozen launcher. Giving up
+     * is always safe: it just means launching with the mods already installed.
+     */
+    private static final int ANSWER_TIMEOUT_MS =
+            Integer.getInteger("modupdater.dialogTimeoutMs", 120_000);
 
     private UpdateDialog() {
     }
@@ -123,7 +136,25 @@ public final class UpdateDialog {
         dialog.setPreferredSize(new Dimension(940, 380));
         dialog.pack();
         dialog.setLocationRelativeTo(null);
+
+        // Best effort at being noticed. A tiling WM may still place this on the
+        // workspace it considers active rather than the one in front of the
+        // user, which is why the timeout below exists and why the caller logs
+        // that an answer is being waited for.
+        dialog.setAlwaysOnTop(true);
+        dialog.toFront();
+        dialog.requestFocus();
+
+        Timer timeout = new Timer(ANSWER_TIMEOUT_MS, e -> {
+            Log.warn("no answer after " + (ANSWER_TIMEOUT_MS / 1000)
+                    + "s — launching without updating");
+            dialog.dispose();
+        });
+        timeout.setRepeats(false);
+        timeout.start();
+
         dialog.setVisible(true);
+        timeout.stop();
 
         return choice.get();
     }

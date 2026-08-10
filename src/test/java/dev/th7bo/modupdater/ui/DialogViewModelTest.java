@@ -119,6 +119,23 @@ class DialogViewModelTest {
     }
 
     @Test
+    void identifiesTheBuildWhenTheVersionStringIsUnchanged() {
+        // SkyHanni 7.44.0 rebuilt from a newer commit: same version, new bytes.
+        // "7.44.0 -> 7.44.0" would look like a bug to the user.
+        InstalledMod installed = new InstalledMod(
+                Path.of("mods/skyhanni.jar"), "skyhanni.jar", "skyhanni", "7.44.0", "old-sha");
+        Manifest.Version version = new Manifest.Version("7.44.0", "fabric", List.of("26.1"), "~26.1", "prefix",
+                "SkyHanni-7.44.0.jar", "c14afbf6aa7cc0cc", 100, "http://example.test/s.jar",
+                "b", "t", "abc1234", "Fix something");
+        Manifest.Mod mod = new Manifest.Mod("skyhanni", "SkyHanni", "repo-1", "SkyHanni", List.of(version));
+
+        var model = new DialogViewModel(List.of(new UpdateCandidate(installed, mod, version)));
+
+        assertEquals("7.44.0", model.rows().get(0).installedVersion());
+        assertEquals("7.44.0 (build c14afbf6)", model.rows().get(0).availableVersion());
+    }
+
+    @Test
     void truncatesAVeryLongCommitSummary() {
         var model = new DialogViewModel(List.of(candidate("a", "1.0.0", "x".repeat(200), 10)));
 

@@ -34,7 +34,21 @@ public record UpdateRow(
 
     private static String versionLabel(UpdateCandidate candidate) {
         String version = candidate.version().modVersion();
-        return version == null || version.isBlank() ? "new build" : version;
+        if (version == null || version.isBlank()) {
+            return "new build";
+        }
+
+        // The platform builds from development commits, so the same release
+        // version gets rebuilt repeatedly with different bytes. Showing
+        // "7.44.0 -> 7.44.0" reads as a bug, so name the build instead.
+        if (version.equals(candidate.installed().modVersion())) {
+            String sha = candidate.version().sha256();
+            return sha != null && sha.length() >= 8
+                    ? version + " (build " + sha.substring(0, 8) + ")"
+                    : version + " (new build)";
+        }
+
+        return version;
     }
 
     private static String changeLabel(UpdateCandidate candidate) {

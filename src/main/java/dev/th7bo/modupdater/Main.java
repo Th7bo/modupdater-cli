@@ -121,6 +121,12 @@ public final class Main {
             return OK;
         }
 
+        // The launcher blocks on this hook while the dialog is up, and a tiling
+        // window manager may have put that dialog on another workspace. Say so,
+        // or a waiting prompt is indistinguishable from a frozen launcher.
+        Log.info("waiting for your answer in the \"Mod updates available\" window"
+                + " (check your other workspaces if you can't see it)");
+
         UpdateDialog.Choice choice = UpdateDialog.show(model);
 
         return switch (choice) {
