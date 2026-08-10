@@ -76,8 +76,17 @@ done
 echo
 
 printf 'Which one? (number, or several like 1,3, or "all"): '
-read -r selection
-[ -n "$selection" ] || die "Nothing selected."
+read -r selection || true
+if [ -z "$selection" ]; then
+    if [ -t 0 ]; then
+        die "Nothing selected."
+    fi
+    # No answer and no terminal: whatever launched this handed us a stream
+    # rather than a keyboard, so no prompt can ever be answered.
+    die "Nothing selected — this installer could not read your answer.
+Run it from a terminal, or download and run install.sh directly:
+  https://github.com/Th7bo/modupdater-cli/releases/latest"
+fi
 
 chosen=()
 if [ "$selection" = "all" ]; then
