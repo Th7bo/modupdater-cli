@@ -35,6 +35,8 @@ public record Manifest(String generatedAt, List<Mod> mods) {
             String loader,
             List<String> mcVersions,
             String mcVersionsRaw,
+            /** "exact" or "prefix"; absent on servers older than §12.1's range support. */
+            String mcVersionMatch,
             String filename,
             String sha256,
             long size,
@@ -49,11 +51,25 @@ public record Manifest(String generatedAt, List<Mod> mods) {
         }
 
         /**
-         * Exact-string match only. §12.1 normalizes version ranges server-side
-         * precisely so there is one implementation of that logic, not two.
+         * No range parsing here — the server resolves the constraint and tells us
+         * which of two dumb comparisons to apply (§12.1), so that logic has one
+         * implementation rather than two that can disagree.
+         *
+         * <p>"prefix" covers a whole Minecraft line: a JAR built for {@code ~26.1}
+         * runs on 26.1.2. Anything else, including a missing value from an older
+         * server, compares exactly.
          */
         public boolean supports(String mcVersion) {
-            return mcVersion != null && mcVersions.contains(mcVersion);
+            if (mcVersion == null || mcVersion.isBlank()) {
+                return false;
+            }
+
+            if ("prefix".equals(mcVersionMatch)) {
+                return mcVersions.stream()
+                        .anyMatch(base -> mcVersion.equals(base) || mcVersion.startsWith(base + "."));
+            }
+
+            return mcVersions.contains(mcVersion);
         }
     }
 }

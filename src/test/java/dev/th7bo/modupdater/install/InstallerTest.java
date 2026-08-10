@@ -50,7 +50,7 @@ class InstallerTest {
         InstalledMod installed = new InstalledMod(
                 installedJar, installedJar.getFileName().toString(), "examplemod", "1.0.0", "old-sha");
 
-        Manifest.Version version = new Manifest.Version("2.0.0", "fabric", List.of("1.21.4"), "1.21.4",
+        Manifest.Version version = new Manifest.Version("2.0.0", "fabric", List.of("1.21.4"), "1.21.4", "exact",
                 newFilename, sha, 17, "http://example.test/mod.jar",
                 "build-1", "2026-08-10T10:00:00Z", "abc1234", "Newer build");
 

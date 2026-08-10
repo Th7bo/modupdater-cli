@@ -117,37 +117,11 @@ mkdir -p "$INSTALL_DIR"
 cp "$JAR" "$INSTALL_DIR/modupdater-cli.jar"
 cp "$HERE/modupdater.sh" "$INSTALL_DIR/modupdater.sh"
 chmod +x "$INSTALL_DIR/modupdater.sh"
-
-# Prism stores instance.cfg through Qt's INI handling, which strips quote
-# characters and drops unquoted whitespace outside them — so a value like
-#     "/path/modupdater.sh" check
-# is silently rewritten to /path/modupdater.shcheck the next time Prism saves,
-# and the launch then fails with "process failed to start".
-#
-# These one-line scripts take no arguments, so the hook value is a single bare
-# path with nothing in it for Qt to mangle.
-for hook_mode in check apply; do
-    hook_script="$INSTALL_DIR/$hook_mode.sh"
-    printf '#!/usr/bin/env bash\nexec "%s" %s\n' "$INSTALL_DIR/modupdater.sh" "$hook_mode" > "$hook_script"
-    chmod +x "$hook_script"
-done
-
 ok "Installed the updater into $INSTALL_DIR"
 
-PRE_HOOK="$INSTALL_DIR/check.sh"
-POST_HOOK="$INSTALL_DIR/apply.sh"
+HOOK="$INSTALL_DIR/modupdater.sh"
 
 # ── Per-instance setup ──────────────────────────────────────────────────────
-
-# Qt keeps an unquoted value verbatim, but eats whitespace that sits outside
-# quotes. A path with no spaces therefore needs no quoting at all; one with
-# spaces must be quoted as a whole, never partially.
-quote_for_cfg() {
-    case "$1" in
-        *[[:space:]]*) printf '"%s"' "$1" ;;
-        *) printf '%s' "$1" ;;
-    esac
-}
 
 set_cfg_key() {
     cfg_file="$1"; cfg_key="$2"; cfg_value="$3"
@@ -195,14 +169,14 @@ for idx in "${chosen[@]}"; do
             [Nn]*)
                 manual_needed=1
                 echo "  Skipped. Add these yourself under Settings > Custom commands:"
-                echo "    Pre-launch: $PRE_HOOK"
-                echo "    Post-exit:  $POST_HOOK"
+                echo "    Pre-launch: \"$HOOK\" check"
+                echo "    Post-exit:  \"$HOOK\" apply"
                 ;;
             *)
                 cp "$cfg" "$cfg.modupdater-backup"
                 set_cfg_key "$cfg" "OverrideCommands" "true"
-                set_cfg_key "$cfg" "PreLaunchCommand" "$(quote_for_cfg "$PRE_HOOK")"
-                set_cfg_key "$cfg" "PostExitCommand" "$(quote_for_cfg "$POST_HOOK")"
+                set_cfg_key "$cfg" "PreLaunchCommand" "\"$HOOK\" check"
+                set_cfg_key "$cfg" "PostExitCommand" "\"$HOOK\" apply"
                 ok "  Launcher hooks configured (backup at $(basename "$cfg").modupdater-backup)"
                 warn "  Close and reopen Prism so it picks up the change."
                 ;;
@@ -211,8 +185,8 @@ for idx in "${chosen[@]}"; do
         manual_needed=1
         echo "  Modrinth App can't be configured automatically."
         echo "  Open the instance's Options > Hooks and paste:"
-        echo "    Pre-launch: $PRE_HOOK"
-        echo "    Post-exit:  $POST_HOOK"
+        echo "    Pre-launch: \"$HOOK\" check"
+        echo "    Post-exit:  \"$HOOK\" apply"
     fi
 
     echo "  Checking the connection..."

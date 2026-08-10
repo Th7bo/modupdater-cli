@@ -1,0 +1,1 @@
+2026-08-10T23:19:32.128528267+02:00 WARN no base URL configured — set base.url in modupdater.properties. Launching unchanged.

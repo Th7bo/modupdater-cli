@@ -19,7 +19,7 @@ class DifferTest {
     }
 
     private static Manifest.Version version(String sha, String... mcVersions) {
-        return new Manifest.Version("2.0.0", "fabric", List.of(mcVersions), "1.21.4",
+        return new Manifest.Version("2.0.0", "fabric", List.of(mcVersions), "1.21.4", "exact",
                 "mod-2.0.0.jar", sha, 1024, "http://example.test/mod.jar",
                 "build-1", "2026-08-10T10:00:00Z", "abc1234", "Newer build");
     }
@@ -76,6 +76,49 @@ class DifferTest {
         assertEquals("sha-1214", plan.get(0).version().sha256());
     }
 
+    private static Manifest.Version prefixVersion(String sha, String base) {
+        return new Manifest.Version("2.0.0", "fabric", List.of(base), "~" + base, "prefix",
+                "mod-2.0.0.jar", sha, 1024, "http://example.test/mod.jar",
+                "build-1", "2026-08-10T10:00:00Z", "abc1234", "Newer build");
+    }
+
+    @Test
+    void offersAPrefixBuildToAPatchRelease() {
+        // The real case: SkyHanni declares ~26.1 and the instance runs 26.1.2.
+        Manifest manifest = manifestOf("skyhanni", "SkyHanni", prefixVersion("new-sha", "26.1"));
+
+        List<UpdateCandidate> plan = Differ.plan(List.of(installed("skyhanni", "old-sha")), manifest, "26.1.2");
+
+        assertEquals(1, plan.size());
+    }
+
+    @Test
+    void offersAPrefixBuildToTheBaseVersionItself() {
+        Manifest manifest = manifestOf("skyhanni", "SkyHanni", prefixVersion("new-sha", "26.1"));
+
+        assertEquals(1, Differ.plan(List.of(installed("skyhanni", "old-sha")), manifest, "26.1").size());
+    }
+
+    @Test
+    void doesNotLetAPrefixLeakIntoTheNextLine() {
+        Manifest manifest = manifestOf("skyhanni", "SkyHanni", prefixVersion("new-sha", "26.1"));
+
+        assertTrue(Differ.plan(List.of(installed("skyhanni", "old-sha")), manifest, "26.2").isEmpty());
+        assertTrue(Differ.plan(List.of(installed("skyhanni", "old-sha")), manifest, "26.11").isEmpty(),
+                "26.11 is a different line from 26.1, not a patch of it");
+    }
+
+    @Test
+    void treatsAMissingMatchModeAsExact() {
+        // A server predating the range support sends no mcVersionMatch at all.
+        Manifest.Version legacy = new Manifest.Version("2.0.0", "fabric", List.of("26.1"), "~26.1", null,
+                "mod.jar", "new-sha", 1, "http://example.test/mod.jar", "b", "t", null, null);
+        Manifest manifest = manifestOf("skyhanni", "SkyHanni", legacy);
+
+        assertTrue(Differ.plan(List.of(installed("skyhanni", "old-sha")), manifest, "26.1.2").isEmpty(),
+                "missing information must narrow behaviour, never widen it");
+    }
+
     @Test
     void doesNotOfferAnUnresolvedCompatibilityRange() {
         Manifest manifest = manifestOf("examplemod", "example-mod", version("new-sha"));
@@ -128,7 +171,7 @@ class DifferTest {
 
     @Test
     void skipsManifestEntriesWithNoHash() {
-        Manifest.Version noHash = new Manifest.Version("2.0.0", "fabric", List.of(MC), null,
+        Manifest.Version noHash = new Manifest.Version("2.0.0", "fabric", List.of(MC), null, "exact",
                 "mod.jar", null, 1, "http://example.test/mod.jar", "b", "t", null, null);
         Manifest manifest = manifestOf("examplemod", "example-mod", noHash);
 

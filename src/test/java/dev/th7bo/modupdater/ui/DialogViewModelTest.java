@@ -18,7 +18,7 @@ class DialogViewModelTest {
         InstalledMod installed = new InstalledMod(
                 Path.of("mods", modId + ".jar"), modId + ".jar", modId, installedVersion, "old-sha");
 
-        Manifest.Version version = new Manifest.Version("2.0.0", "fabric", List.of("1.21.4"), "1.21.4",
+        Manifest.Version version = new Manifest.Version("2.0.0", "fabric", List.of("1.21.4"), "1.21.4", "exact",
                 modId + "-2.0.0.jar", "new-sha", size, "http://example.test/mod.jar",
                 "build-1", "2026-08-10T10:00:00Z", "abc1234", summary);
 
@@ -105,7 +105,7 @@ class DialogViewModelTest {
     @Test
     void labelsAMissingInstalledVersion() {
         InstalledMod noVersion = new InstalledMod(Path.of("mods/x.jar"), "x.jar", "x", null, "sha");
-        Manifest.Version version = new Manifest.Version(null, "fabric", List.of("1.21.4"), null,
+        Manifest.Version version = new Manifest.Version(null, "fabric", List.of("1.21.4"), null, "exact",
                 "x-2.jar", "new", 1, "http://example.test/x.jar", "b", "t", null, null);
         Manifest.Mod mod = new Manifest.Mod("x", null, "repo-1", "example-mod", List.of(version));
 

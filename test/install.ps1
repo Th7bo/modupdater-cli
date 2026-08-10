@@ -109,36 +109,11 @@ if (-not $token) { Stop-With 'A token is required.' }
 New-Item -ItemType Directory -Force -Path $installDir | Out-Null
 Copy-Item $jar (Join-Path $installDir 'modupdater-cli.jar') -Force
 Copy-Item (Join-Path $here 'modupdater.bat') (Join-Path $installDir 'modupdater.bat') -Force
-
-# Prism stores instance.cfg through Qt's INI handling, which strips quote
-# characters and drops unquoted whitespace outside them - so a value like
-#     "C:\path\modupdater.bat" check
-# is silently rewritten to ...modupdater.batcheck the next time Prism saves and
-# the launch then fails with "process failed to start".
-#
-# These take no arguments, so the hook value has nothing in it to mangle.
-foreach ($mode in @('check', 'apply')) {
-    $wrapper = Join-Path $installDir "$mode.bat"
-    Set-Content -LiteralPath $wrapper -Encoding ASCII -Value @(
-        '@echo off',
-        ('call "' + (Join-Path $installDir 'modupdater.bat') + '" ' + $mode),
-        'exit /b %errorlevel%'
-    )
-}
-
 Write-Ok "Installed the updater into $installDir"
 
-$preHook = Join-Path $installDir 'check.bat'
-$postHook = Join-Path $installDir 'apply.bat'
+$hook = Join-Path $installDir 'modupdater.bat'
 
 # ── Per-instance setup ──────────────────────────────────────────────────────
-
-# Qt keeps an unquoted value verbatim but eats whitespace outside quotes, so a
-# path with spaces must be quoted as a whole, never partially.
-function Quote-ForCfg ($path) {
-    if ($path -match '\s') { return '"' + $path + '"' }
-    return $path
-}
 
 function Set-CfgKey ($file, $key, $value) {
     $lines = Get-Content -LiteralPath $file
@@ -195,13 +170,13 @@ foreach ($idx in $chosen) {
         if ($reply -match '^[Nn]') {
             $manualNeeded = $true
             Write-Host '  Skipped. Add these yourself under Settings > Custom commands:'
-            Write-Host "    Pre-launch: $preHook"
-            Write-Host "    Post-exit:  $postHook"
+            Write-Host "    Pre-launch: `"$hook`" check"
+            Write-Host "    Post-exit:  `"$hook`" apply"
         } else {
             Copy-Item $inst.Cfg "$($inst.Cfg).modupdater-backup" -Force
             Set-CfgKey $inst.Cfg 'OverrideCommands' 'true'
-            Set-CfgKey $inst.Cfg 'PreLaunchCommand' (Quote-ForCfg $preHook)
-            Set-CfgKey $inst.Cfg 'PostExitCommand' (Quote-ForCfg $postHook)
+            Set-CfgKey $inst.Cfg 'PreLaunchCommand' "`"$hook`" check"
+            Set-CfgKey $inst.Cfg 'PostExitCommand' "`"$hook`" apply"
             Write-Ok '  Launcher hooks configured (backup alongside instance.cfg)'
             Write-Warn '  Close and reopen Prism so it picks up the change.'
         }
@@ -209,8 +184,8 @@ foreach ($idx in $chosen) {
         $manualNeeded = $true
         Write-Host "  Modrinth App can't be configured automatically."
         Write-Host '  Open the instance''s Options > Hooks and paste:'
-        Write-Host "    Pre-launch: $preHook"
-        Write-Host "    Post-exit:  $postHook"
+        Write-Host "    Pre-launch: `"$hook`" check"
+        Write-Host "    Post-exit:  `"$hook`" apply"
     }
 
     Write-Host '  Checking the connection...'
