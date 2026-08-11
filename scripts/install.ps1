@@ -30,6 +30,25 @@ function Write-Utf8 ($path, $lines) {
     [IO.File]::WriteAllText($path, ((@($lines) -join "`r`n") + "`r`n"), $Utf8NoBom)
 }
 
+# Windows has no chmod, so the token is restricted by taking the file out of
+# inheritance and granting only the current user.
+#
+# Warns rather than throws. $ErrorActionPreference is Stop, and an identity that
+# will not resolve — a Microsoft account, a renamed profile, a domain machine —
+# would otherwise abort the whole setup after the files are already written,
+# leaving a half-configured instance over a hardening step.
+function Protect-TokenFile ($path) {
+    try {
+        $acl = Get-Acl -LiteralPath $path
+        $acl.SetAccessRuleProtection($true, $false)
+        $acl.SetAccessRule((New-Object Security.AccessControl.FileSystemAccessRule(
+            [Security.Principal.WindowsIdentity]::GetCurrent().Name, 'FullControl', 'Allow')))
+        Set-Acl -LiteralPath $path -AclObject $acl
+    } catch {
+        Write-Warn "  Could not restrict permissions on $path - it is readable by other accounts on this PC."
+    }
+}
+
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $jar = if ($env:MODUPDATER_JAR) { $env:MODUPDATER_JAR } else { Join-Path $here 'modupdater-cli.jar' }
 $installDir = if ($env:MODUPDATER_HOME) { $env:MODUPDATER_HOME } else { Join-Path $env:LOCALAPPDATA 'modupdater' }
@@ -187,11 +206,7 @@ foreach ($mode in @('check', 'apply')) {
 # Remembered centrally so setting up another instance later asks nothing.
 Write-Utf8 $settingsFile "base.url=$baseUrl"
 [IO.File]::WriteAllText($savedTokenFile, $token)
-$savedAcl = Get-Acl $savedTokenFile
-$savedAcl.SetAccessRuleProtection($true, $false)
-$savedAcl.SetAccessRule((New-Object Security.AccessControl.FileSystemAccessRule(
-    $env:USERNAME, 'FullControl', 'Allow')))
-Set-Acl -Path $savedTokenFile -AclObject $savedAcl
+Protect-TokenFile $savedTokenFile
 
 Write-Ok "Installed the updater into $installDir"
 
@@ -252,13 +267,7 @@ foreach ($idx in $chosen) {
 
     $tokenFile = Join-Path $stateDir 'token'
     [IO.File]::WriteAllText($tokenFile, $token)
-
-    # Windows has no chmod; restrict the token to the current user instead.
-    $acl = Get-Acl $tokenFile
-    $acl.SetAccessRuleProtection($true, $false)
-    $acl.SetAccessRule((New-Object Security.AccessControl.FileSystemAccessRule(
-        $env:USERNAME, 'FullControl', 'Allow')))
-    Set-Acl -Path $tokenFile -AclObject $acl
+    Protect-TokenFile $tokenFile
 
     Write-Ok '  Wrote settings and token'
 
