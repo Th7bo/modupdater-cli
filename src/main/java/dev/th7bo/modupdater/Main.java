@@ -12,6 +12,7 @@ import dev.th7bo.modupdater.manifest.FetchResult;
 import dev.th7bo.modupdater.manifest.ManifestClient;
 import dev.th7bo.modupdater.setup.Instance;
 import dev.th7bo.modupdater.setup.InstanceDiscovery;
+import dev.th7bo.modupdater.setup.ModrinthHooks;
 import dev.th7bo.modupdater.ui.DialogViewModel;
 import dev.th7bo.modupdater.ui.UpdateDialog;
 import dev.th7bo.modupdater.util.Log;
@@ -74,6 +75,7 @@ public final class Main {
             case "apply" -> apply(config);
             case "list-instances" -> listInstances();
             case "install-mod" -> installMod(config, args);
+            case "configure-modrinth" -> configureModrinth(config, args);
             default -> {
                 Log.warn("unknown command '" + command + "', expected 'check', 'apply' or 'install-mod'");
                 yield OK;
@@ -130,6 +132,41 @@ public final class Main {
                     "the server offers no build of " + notOffered.modId()
                             + " for Minecraft " + config.mcVersion());
             case ModInstaller.Result.Failed failed -> Log.error("could not install " + modId + ": " + failed.detail());
+        }
+
+        return OK;
+    }
+
+    /**
+     * Fills in Modrinth App's launch hooks, which its own settings screen refuses
+     * to save.
+     *
+     * <p>Exits 0 whatever happens, like the rest of setup: failing to automate a
+     * step the user can still do by hand is not worth failing the install over.
+     */
+    private static int configureModrinth(Config config, String[] args) {
+        String pre = flagValue(args, "--pre", null);
+        String post = flagValue(args, "--post", null);
+
+        if (pre == null || post == null) {
+            Log.error("configure-modrinth needs --pre and --post");
+            return OK;
+        }
+
+        Path gameDir = config.modsDir().getParent();
+        if (gameDir == null) {
+            Log.error("could not work out the instance folder from " + config.modsDir());
+            return OK;
+        }
+
+        ModrinthHooks.Result result = ModrinthHooks.configure(gameDir, pre, post);
+
+        switch (result) {
+            case ModrinthHooks.Result.Configured ok -> {
+                Log.info("configured Modrinth hooks for " + ok.instanceName());
+                Log.info("a copy of the database was saved next to it before writing");
+            }
+            default -> Log.warn(result.describe());
         }
 
         return OK;

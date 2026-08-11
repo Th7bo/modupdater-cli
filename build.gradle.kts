@@ -4,7 +4,7 @@ plugins {
 }
 
 group = "dev.th7bo.modupdater"
-version = "0.2.3"
+version = "0.3.0"
 
 repositories {
     mavenCentral()
@@ -12,8 +12,14 @@ repositories {
 
 dependencies {
     // The JDK has no JSON parser and the manifest is a document we don't control,
-    // so parsing it by hand is not worth the risk. Gson is the only runtime dep.
+    // so parsing it by hand is not worth the risk.
     implementation("com.google.code.gson:gson:2.11.0")
+
+    // Modrinth App keeps its launch hooks in a SQLite database, and its own UI
+    // will not save them. Writing that file needs a real SQLite: the column holds
+    // JSONB, SQLite's internal binary encoding, and the only safe way to produce
+    // it is the engine's own jsonb() function.
+    implementation("org.xerial:sqlite-jdbc:3.47.1.0")
 
     testImplementation(platform("org.junit:junit-bom:5.11.0"))
     testImplementation("org.junit.jupiter:junit-jupiter")
@@ -100,11 +106,17 @@ tasks.register<Exec>("publishInstaller") {
 }
 
 // Single runnable JAR. Done with a plain Jar task rather than a shading plugin:
-// there is exactly one dependency to bundle, and this avoids pinning a plugin
+// there are only two dependencies to bundle, and this avoids pinning a plugin
 // version against Gradle's own release cycle.
 tasks.jar {
     manifest {
         attributes["Main-Class"] = application.mainClass.get()
+
+        // sqlite-jdbc loads a native library, which Java 24 and later warn about
+        // on every run. Declared here rather than as a command-line flag because
+        // --enable-native-access is not a valid option on Java 21, which is the
+        // version we ask people to install; older JVMs ignore this attribute.
+        attributes["Enable-Native-Access"] = "ALL-UNNAMED"
     }
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     exclude("META-INF/*.SF", "META-INF/*.DSA", "META-INF/*.RSA", "META-INF/versions/**/module-info.class")

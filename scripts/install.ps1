@@ -312,11 +312,23 @@ foreach ($idx in $chosen) {
             Write-Warn '  Close and reopen Prism so it picks up the change.'
         }
     } else {
-        $manualNeeded = $true
-        Write-Host "  Modrinth App can't be configured automatically."
-        Write-Host '  Open the instance''s Options > Hooks and paste:'
-        Write-Host "    Pre-launch: $preHook"
-        Write-Host "    Post-exit:  $postHook"
+        # Modrinth App's own Hooks screen creates the record and stores nulls, so
+        # the fields cannot be filled in by hand. Written straight into its
+        # database instead, which is why this needs the app closed.
+        Write-Host '  Modrinth App stores its hooks in a database, and its settings'
+        Write-Host '  screen does not save them. This can write them directly.'
+        Write-Warn '  Close Modrinth App completely first - it rewrites this file when it exits.'
+        $reply = Read-Host '  Write the hooks now? [Y/n]'
+
+        if ($reply -match '^[Nn]') {
+            $manualNeeded = $true
+            Write-Host '  Skipped. Options > Hooks, if it will take them:'
+            Write-Host "    Pre-launch: $preHook"
+            Write-Host "    Post-exit:  $postHook"
+        } else {
+            Invoke-Cli @('configure-modrinth', '--mods-dir', $modsDir, '--pre', $preHook, '--post', $postHook)
+            Write-Warn '  Start Modrinth App again and check Options > Hooks shows them.'
+        }
     }
 
     $wantMod = Read-Host '  Also install the in-game notifier, so updates show up while you play? [Y/n]'

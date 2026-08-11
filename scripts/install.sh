@@ -270,11 +270,28 @@ for idx in "${chosen[@]}"; do
                 ;;
         esac
     else
-        manual_needed=1
-        echo "  Modrinth App can't be configured automatically."
-        echo "  Open the instance's Options > Hooks and paste:"
-        echo "    Pre-launch: $PRE_HOOK"
-        echo "    Post-exit:  $POST_HOOK"
+        # Modrinth App's own Hooks screen creates the record and stores nulls, so
+        # the fields cannot be filled in by hand. Written straight into its
+        # database instead, which is why this needs the app closed.
+        echo "  Modrinth App stores its hooks in a database, and its settings"
+        echo "  screen does not save them. This can write them directly."
+        warn "  Close Modrinth App completely first — it rewrites this file when it exits."
+        printf '  Write the hooks now? [Y/n]: '
+        read -r reply
+        case "$reply" in
+            [Nn]*)
+                manual_needed=1
+                echo "  Skipped. Options > Hooks, if it will take them:"
+                echo "    Pre-launch: $PRE_HOOK"
+                echo "    Post-exit:  $POST_HOOK"
+                ;;
+            *)
+                "$JAVA_BIN" -jar "$INSTALL_DIR/modupdater-cli.jar" configure-modrinth \
+                    --mods-dir "$mods_dir" --pre "$PRE_HOOK" --post "$POST_HOOK" 2>&1 |
+                    sed 's/^/    /'
+                warn "  Start Modrinth App again and check Options > Hooks shows them."
+                ;;
+        esac
     fi
 
     printf '  Also install the in-game notifier, so updates show up while you play? [Y/n]: '
