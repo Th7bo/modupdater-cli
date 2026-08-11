@@ -18,6 +18,18 @@ function Stop-With ($m) {
     exit 1
 }
 
+# install.bat runs this through powershell.exe — Windows PowerShell 5.1 — where
+# `Set-Content -Encoding UTF8` prepends a byte-order mark. A BOM makes Java read
+# the first key of a .properties file as "﻿base.url", so the server setting
+# goes missing while the file visibly contains it, and Qt reads a BOM'd
+# "[General]" as an ordinary line, which loses every setting in Prism's
+# instance.cfg. Nothing here may be written with one.
+$Utf8NoBom = New-Object Text.UTF8Encoding($false)
+
+function Write-Utf8 ($path, $lines) {
+    [IO.File]::WriteAllText($path, ((@($lines) -join "`r`n") + "`r`n"), $Utf8NoBom)
+}
+
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $jar = if ($env:MODUPDATER_JAR) { $env:MODUPDATER_JAR } else { Join-Path $here 'modupdater-cli.jar' }
 $installDir = if ($env:MODUPDATER_HOME) { $env:MODUPDATER_HOME } else { Join-Path $env:LOCALAPPDATA 'modupdater' }
@@ -163,7 +175,9 @@ Copy-Item (Join-Path $here 'modupdater.bat') (Join-Path $installDir 'modupdater.
 # These take no arguments, so the hook value has nothing in it to mangle.
 foreach ($mode in @('check', 'apply')) {
     $wrapper = Join-Path $installDir "$mode.bat"
-    Set-Content -LiteralPath $wrapper -Encoding ASCII -Value @(
+    # ANSI rather than ASCII: cmd.exe reads .bat in the system codepage, and a
+    # user folder like C:\Users\José turns into an unusable path under ASCII.
+    Set-Content -LiteralPath $wrapper -Encoding Default -Value @(
         '@echo off',
         ('call "' + (Join-Path $installDir 'modupdater.bat') + '" ' + $mode),
         'exit /b %errorlevel%'
@@ -171,7 +185,7 @@ foreach ($mode in @('check', 'apply')) {
 }
 
 # Remembered centrally so setting up another instance later asks nothing.
-Set-Content -LiteralPath $settingsFile -Value "base.url=$baseUrl" -Encoding UTF8
+Write-Utf8 $settingsFile "base.url=$baseUrl"
 [IO.File]::WriteAllText($savedTokenFile, $token)
 $savedAcl = Get-Acl $savedTokenFile
 $savedAcl.SetAccessRuleProtection($true, $false)
@@ -207,7 +221,7 @@ function Set-CfgKey ($file, $key, $value) {
             if (-not $inserted -and $line -eq '[General]') { "$key=$value"; $inserted = $true }
         }
     }
-    Set-Content -LiteralPath $file -Value $out -Encoding UTF8
+    Write-Utf8 $file $out
 }
 
 $manualNeeded = $false
@@ -234,8 +248,7 @@ foreach ($idx in $chosen) {
     $stateDir = Join-Path $modsDir '.modupdater'
     New-Item -ItemType Directory -Force -Path $stateDir | Out-Null
 
-    Set-Content -LiteralPath (Join-Path $inst.GameDir 'modupdater.properties') `
-        -Value @("base.url=$baseUrl", "mc.version=$version") -Encoding UTF8
+    Write-Utf8 (Join-Path $inst.GameDir 'modupdater.properties') @("base.url=$baseUrl", "mc.version=$version")
 
     $tokenFile = Join-Path $stateDir 'token'
     [IO.File]::WriteAllText($tokenFile, $token)

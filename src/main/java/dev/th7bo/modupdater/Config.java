@@ -107,6 +107,13 @@ public record Config(
         }
 
         try (var reader = Files.newBufferedReader(file, StandardCharsets.UTF_8)) {
+            // Java's UTF-8 decoder keeps a byte-order mark as a character, so a
+            // BOM makes the first key "﻿base.url" and the setting silently
+            // goes missing. Both Notepad and Windows PowerShell 5.1 write one.
+            reader.mark(1);
+            if (reader.read() != '﻿') {
+                reader.reset();
+            }
             properties.load(reader);
         } catch (IOException e) {
             // A broken config file is not a reason to block the launch.
