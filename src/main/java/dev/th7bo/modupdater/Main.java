@@ -96,6 +96,14 @@ public final class Main {
             Log.warn("rolled back after a failed launch: " + String.join(", ", rolledBack));
         }
 
+        // A request left over from last session. Normally the post-exit hook has
+        // already installed it, but that hook only runs if the game process
+        // actually exits — and a mod hanging in a shutdown hook leaves it alive
+        // until the user kills it, which skips post-exit entirely. Doing it here
+        // as well means "update on exit" survives that, and pre-launch is the
+        // better moment anyway: nothing holds the JARs open yet.
+        applyRequest(config);
+
         if (!config.usable()) {
             Log.warn("no base URL configured — set base.url in modupdater.properties. Launching unchanged.");
             return OK;
