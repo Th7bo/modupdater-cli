@@ -22,8 +22,6 @@ import javax.swing.table.JTableHeader;
 import java.awt.BorderLayout;
 import java.awt.Dimension;
 import java.awt.Font;
-import java.awt.MouseInfo;
-import java.awt.PointerInfo;
 import java.awt.Rectangle;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
@@ -283,25 +281,10 @@ public final class UpdateDialog {
         return table;
     }
 
-    /**
-     * Centres the dialog on the screen containing the mouse pointer, rather than
-     * on the default screen device.
-     *
-     * <p>With several monitors, the default device is whichever one the display
-     * server happens to list first — on a tiling window manager that also decides
-     * which workspace the window is bound to, so the prompt can open on a
-     * monitor the user isn't looking at and the launch appears to hang. The
-     * pointer is the best available guess at where they actually are.
-     */
+    /** Centres the dialog on the screen the user is actually looking at. */
     private static void placeOnActiveScreen(JDialog dialog) {
         try {
-            PointerInfo pointer = MouseInfo.getPointerInfo();
-            if (pointer == null || pointer.getDevice() == null) {
-                dialog.setLocationRelativeTo(null);
-                return;
-            }
-
-            Rectangle screen = pointer.getDevice().getDefaultConfiguration().getBounds();
+            Rectangle screen = ActiveScreen.bounds();
             dialog.setLocation(
                     screen.x + (screen.width - dialog.getWidth()) / 2,
                     screen.y + (screen.height - dialog.getHeight()) / 2);
