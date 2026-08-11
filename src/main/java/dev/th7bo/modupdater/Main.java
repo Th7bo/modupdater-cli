@@ -166,7 +166,12 @@ public final class Main {
                 Log.info("configured Modrinth hooks for " + ok.instanceName());
                 Log.info("a copy of the database was saved next to it before writing");
             }
-            default -> Log.warn(result.describe());
+            default -> {
+                Log.warn(result.describe());
+                Log.warn("set these by hand in Options > Hooks:");
+                Log.warn("  Pre-launch: " + ModrinthHooks.hookCommand(pre));
+                Log.warn("  Post-exit:  " + ModrinthHooks.hookCommand(post));
+            }
         }
 
         return OK;

@@ -77,7 +77,7 @@ public final class ModrinthHooks {
      * <p>Batch files additionally go through {@code cmd /c}: Windows cannot execute
      * a {@code .bat} as a process image directly.
      */
-    static String hookCommand(String path) {
+    public static String hookCommand(String path) {
         // Close the quoted run, add an escaped quote, reopen: the only way to put
         // a single quote inside single quotes.
         String quoted = "'" + path.replace("'", "'\\''") + "'";
@@ -168,6 +168,11 @@ public final class ModrinthHooks {
             return new Result.Configured(instanceName, database);
         } catch (SQLException e) {
             return new Result.Failed(e.getMessage());
+        } catch (RuntimeException | LinkageError e) {
+            // The bundled SQLite is native code, and only the platforms people
+            // actually play on are shipped. Anywhere else it fails to load, which
+            // is a reason to print the hooks for pasting — not to end setup.
+            return new Result.Failed("SQLite is not available on this platform (" + e + ")");
         }
     }
 

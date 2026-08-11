@@ -105,6 +105,15 @@ tasks.register<Exec>("publishInstaller") {
     )
 }
 
+val sqliteNatives = "org/sqlite/native/"
+
+// The platforms a Minecraft player could plausibly be on.
+val keptSqlitePlatforms = listOf(
+    "Windows/x86_64", "Windows/aarch64",
+    "Linux/x86_64", "Linux/aarch64",
+    "Mac/x86_64", "Mac/aarch64",
+)
+
 // Single runnable JAR. Done with a plain Jar task rather than a shading plugin:
 // there are only two dependencies to bundle, and this avoids pinning a plugin
 // version against Gradle's own release cycle.
@@ -120,5 +129,18 @@ tasks.jar {
     }
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     exclude("META-INF/*.SF", "META-INF/*.DSA", "META-INF/*.RSA", "META-INF/versions/**/module-info.class")
-    from(configurations.runtimeClasspath.get().map { if (it.isDirectory) it else zipTree(it) })
+
+    from(configurations.runtimeClasspath.get().map { if (it.isDirectory) it else zipTree(it) }) {
+        // sqlite-jdbc ships a native library for 25 platforms — Android, FreeBSD,
+        // ppc64, riscv64, musl — which is 24 MB of the download. Keep the ones a
+        // Minecraft player could plausibly be on.
+        //
+        // A keep-list rather than a list of exclusions, so a platform added in a
+        // later release is dropped by default instead of silently returning.
+        exclude {
+            it.path.startsWith(sqliteNatives)
+                    && keptSqlitePlatforms.none { kept -> it.path.startsWith("$sqliteNatives$kept/") }
+        }
+    }
 }
+
