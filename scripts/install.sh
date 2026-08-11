@@ -277,6 +277,20 @@ for idx in "${chosen[@]}"; do
         echo "    Post-exit:  $POST_HOOK"
     fi
 
+    printf '  Also install the in-game notifier, so updates show up while you play? [Y/n]: '
+    read -r want_mod
+    case "$want_mod" in
+        [Nn]*)
+            echo "  Skipped. Updates will still be offered before each launch."
+            ;;
+        *)
+            # Pulled from the server like any other mod, so it updates itself
+            # afterwards rather than needing a manual download every release.
+            "$JAVA_BIN" -jar "$INSTALL_DIR/modupdater-cli.jar" \
+                install-mod --mods-dir "$mods_dir" 2>&1 | sed 's/^/    /'
+            ;;
+    esac
+
     echo "  Checking the connection..."
     "$JAVA_BIN" -Djava.awt.headless=true -jar "$INSTALL_DIR/modupdater-cli.jar" \
         check --mods-dir "$mods_dir" 2>&1 | sed 's/^/    /'

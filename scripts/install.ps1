@@ -272,6 +272,16 @@ foreach ($idx in $chosen) {
         Write-Host "    Post-exit:  $postHook"
     }
 
+    $wantMod = Read-Host '  Also install the in-game notifier, so updates show up while you play? [Y/n]'
+    if ($wantMod -match '^[Nn]') {
+        Write-Host '  Skipped. Updates will still be offered before each launch.'
+    } else {
+        # Pulled from the server like any other mod, so it updates itself
+        # afterwards rather than needing a manual download every release.
+        & java.exe -jar (Join-Path $installDir 'modupdater-cli.jar') `
+            install-mod --mods-dir $modsDir 2>&1 | ForEach-Object { Write-Host "    $_" }
+    }
+
     Write-Host '  Checking the connection...'
     & java.exe -Djava.awt.headless=true -jar (Join-Path $installDir 'modupdater-cli.jar') `
         check --mods-dir $modsDir 2>&1 | ForEach-Object { Write-Host "    $_" }

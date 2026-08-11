@@ -4,6 +4,7 @@ import dev.th7bo.modupdater.diff.Differ;
 import dev.th7bo.modupdater.diff.UpdateCandidate;
 import dev.th7bo.modupdater.install.Downloader;
 import dev.th7bo.modupdater.install.Installer;
+import dev.th7bo.modupdater.install.ModInstaller;
 import dev.th7bo.modupdater.install.UpdateRequest;
 import dev.th7bo.modupdater.instance.InstalledMod;
 import dev.th7bo.modupdater.instance.InstanceScanner;
@@ -72,8 +73,9 @@ public final class Main {
             case "check" -> check(config);
             case "apply" -> apply(config);
             case "list-instances" -> listInstances();
+            case "install-mod" -> installMod(config, args);
             default -> {
-                Log.warn("unknown command '" + command + "', expected 'check' or 'apply'");
+                Log.warn("unknown command '" + command + "', expected 'check', 'apply' or 'install-mod'");
                 yield OK;
             }
         };
@@ -88,6 +90,57 @@ public final class Main {
             System.out.println(instance.toTsv());
         }
         return OK;
+    }
+
+    /**
+     * Installs a mod from the manifest that the instance does not have.
+     *
+     * Used by the setup script to offer the in-game notifier. Exits 0 whatever
+     * happens: this runs during setup, and failing to add an optional extra is
+     * not a reason to fail the whole installation.
+     */
+    private static int installMod(Config config, String[] args) {
+        String modId = flagValue(args, "--mod-id", "modupdater");
+
+        if (!config.usable()) {
+            Log.warn("no base URL configured; cannot install " + modId);
+            return OK;
+        }
+
+        String token = config.readToken();
+        if (token == null) {
+            Log.warn("no token configured; cannot install " + modId);
+            return OK;
+        }
+
+        FetchResult fetched = new ManifestClient().fetch(config.baseUrl(), token, config.mcVersion());
+        if (!(fetched instanceof FetchResult.Ok ok)) {
+            Log.warn(fetched.describe());
+            return OK;
+        }
+
+        ModInstaller.Result result =
+                new ModInstaller(Downloader.http()).install(ok.manifest(), modId, config.modsDir(), token);
+
+        switch (result) {
+            case ModInstaller.Result.Installed installed -> Log.info("installed " + installed.filename());
+            case ModInstaller.Result.AlreadyPresent present ->
+                    Log.info(present.filename() + " is already installed");
+            case ModInstaller.Result.NotOffered notOffered -> Log.warn(
+                    "the server offers no build of " + notOffered.modId()
+                            + " for Minecraft " + config.mcVersion());
+            case ModInstaller.Result.Failed failed -> Log.error("could not install " + modId + ": " + failed.detail());
+        }
+
+        return OK;
+    }
+
+    private static String flagValue(String[] args, String flag, String fallback) {
+        if (args == null) return fallback;
+        for (int i = 0; i < args.length - 1; i++) {
+            if (flag.equals(args[i])) return args[i + 1];
+        }
+        return fallback;
     }
 
     private static int check(Config config) {
