@@ -37,6 +37,27 @@ function Write-Utf8 ($path, $lines) {
 # will not resolve — a Microsoft account, a renamed profile, a domain machine —
 # would otherwise abort the whole setup after the files are already written,
 # leaving a half-configured instance over a hardening step.
+# Runs the CLI and echoes its output, indented.
+#
+# Two Windows PowerShell hazards, both hit during the first real install:
+#
+#  * Arguments are passed as an array. Written inline, `-Djava.awt.headless=true`
+#    reached java split in two and it tried to run ".awt.headless=true" as the
+#    main class. An array leaves nothing for the parser to re-split.
+#
+#  * Native stderr is not redirected into the pipeline. With `2>&1` those lines
+#    become ErrorRecords, and $ErrorActionPreference is Stop, so anything the CLI
+#    writes to stderr ends the installer — which is how a failed connection test
+#    took down the whole run after the work was already done.
+function Invoke-Cli ($cliArgs, $jvmArgs = @()) {
+    $all = @($jvmArgs) + @('-jar', (Join-Path $installDir 'modupdater-cli.jar')) + @($cliArgs)
+    try {
+        & java.exe @all | ForEach-Object { Write-Host "    $_" }
+    } catch {
+        Write-Warn "    could not run the updater: $($_.Exception.Message)"
+    }
+}
+
 function Protect-TokenFile ($path) {
     try {
         $acl = Get-Acl -LiteralPath $path
@@ -96,13 +117,17 @@ foreach ($line in @($tsv)) {
 
 Write-Host ("Found {0} instance(s):" -f $instances.Count)
 Write-Host ''
+
+# Only worth showing a path when the name alone is ambiguous. Deriving a "folder"
+# from the game directory printed "profiles" against every Modrinth instance,
+# which distinguishes nothing and reads like part of the name.
+$duplicateNames = $instances | Group-Object Name | Where-Object { $_.Count -gt 1 } | ForEach-Object { $_.Name }
+
 for ($i = 0; $i -lt $instances.Count; $i++) {
     $inst = $instances[$i]
     Write-Host ("  {0,2}) [{1}] {2}  (MC {3})" -f ($i + 1), $inst.Launcher, $inst.Name, $inst.Version)
-    # Two instances can share a display name; the folder is what tells them apart.
-    $folder = Split-Path -Leaf (Split-Path -Parent $inst.GameDir)
-    if ($folder -ne $inst.Name) {
-        Write-Host ("      folder: {0}" -f $folder)
+    if ($duplicateNames -contains $inst.Name) {
+        Write-Host ("      {0}" -f $inst.GameDir) -ForegroundColor DarkGray
     }
 }
 Write-Host ''
@@ -300,13 +325,13 @@ foreach ($idx in $chosen) {
     } else {
         # Pulled from the server like any other mod, so it updates itself
         # afterwards rather than needing a manual download every release.
-        & java.exe -jar (Join-Path $installDir 'modupdater-cli.jar') `
-            install-mod --mods-dir $modsDir 2>&1 | ForEach-Object { Write-Host "    $_" }
+        Invoke-Cli @('install-mod', '--mods-dir', $modsDir)
     }
 
     Write-Host '  Checking the connection...'
-    & java.exe -Djava.awt.headless=true -jar (Join-Path $installDir 'modupdater-cli.jar') `
-        check --mods-dir $modsDir 2>&1 | ForEach-Object { Write-Host "    $_" }
+    # Headless so a manifest with updates in it cannot pop the update dialog
+    # in the middle of setup.
+    Invoke-Cli @('check', '--mods-dir', $modsDir) @('-Djava.awt.headless=true')
 }
 
 Write-Host ''
