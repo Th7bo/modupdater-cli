@@ -144,10 +144,15 @@ public final class Main {
     }
 
     private static int check(Config config) {
-        List<String> rolledBack = Installer.restoreIfUnconfirmed(config.modsDir());
-        if (!rolledBack.isEmpty()) {
-            Log.warn("rolled back after a failed launch: " + String.join(", ", rolledBack));
-        }
+        // Settle the previous session the same way the post-exit hook would.
+        //
+        // This used to call restoreIfUnconfirmed directly, which reverts anything
+        // still marked unconfirmed without ever reading the launch marker. Post-exit
+        // is the only place that sets the confirmed flag, and it does not run when a
+        // mod wedges the JVM in a shutdown hook and the process has to be killed — so
+        // every update was reverted at the next launch no matter how long the session
+        // had lasted, and the same three mods reinstalled themselves for a week.
+        settleLastSession(config);
 
         // A request left over from last session. Normally the post-exit hook has
         // already installed it, but that hook only runs if the game process
@@ -235,6 +240,28 @@ public final class Main {
         // Settle the session that just ended before acting on anything new: that
         // decision is about the update already on disk, and installing first would
         // overwrite the state it is judged by.
+        settleLastSession(config);
+
+        applyRequest(config);
+
+        relaunch(config);
+        return OK;
+    }
+
+    /**
+     * Decides whether the update installed before the last session survived it.
+     *
+     * <p>Run from both hooks, because neither is guaranteed to fire: post-exit is
+     * skipped when the game has to be killed, and pre-launch is skipped when the
+     * launcher starts the game some other way. Whichever runs first settles it, and
+     * the second finds nothing pending.
+     *
+     * <p>The launch marker is the real answer. Elapsed time is only the fallback for
+     * instances without the in-game mod, and it is a weaker signal here than
+     * post-exit: it measures time since the install rather than the length of the
+     * session, so a crash followed by a long break reads as a success.
+     */
+    private static void settleLastSession(Config config) {
         Installer.SessionOutcome outcome = Installer.resolveAfterSession(
                 config.modsDir(), MIN_HEALTHY_SESSION, System.currentTimeMillis());
 
@@ -243,14 +270,8 @@ public final class Main {
             case Installer.SessionOutcome.Confirmed confirmed ->
                     Log.info("confirmed " + confirmed.modCount() + " update(s)");
             case Installer.SessionOutcome.RolledBack rolledBack -> Log.warn(
-                    "rolled back " + rolledBack.modIds().size() + " update(s): "
-                            + String.join(", ", rolledBack.modIds()));
+                    "rolled back after a failed launch: " + String.join(", ", rolledBack.modIds()));
         }
-
-        applyRequest(config);
-
-        relaunch(config);
-        return OK;
     }
 
     /**

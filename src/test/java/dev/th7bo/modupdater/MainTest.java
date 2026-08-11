@@ -13,6 +13,7 @@ import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -135,6 +136,66 @@ class MainTest {
         Path mods = modsWithToken(dir);
 
         assertEquals(0, Main.run(new String[]{"apply", "--mods-dir", mods.toString()}));
+    }
+
+    /**
+     * Writes the state a finished update leaves behind: the new JAR in place, the
+     * replaced one in backup, and nothing yet confirming the launch.
+     */
+    private static void pendingUpdate(Path mods, long installedAtMillis) throws IOException {
+        Path state = mods.resolve(".modupdater");
+        Path backup = Files.createDirectories(state.resolve("backup"));
+
+        Files.writeString(mods.resolve("examplemod.jar"), "new bytes");
+        Files.writeString(backup.resolve("examplemod.jar"), "old bytes");
+
+        Files.writeString(state.resolve("pending.json"), """
+                {"entries":[{"modId":"examplemod",
+                  "newFile":"%1$s/examplemod.jar",
+                  "backupFile":"%2$s/examplemod.jar",
+                  "replacedFile":"%1$s/examplemod.jar"}],
+                 "launchConfirmed":false,"installedAtMillis":%3$d}
+                """.formatted(mods, backup, installedAtMillis));
+    }
+
+    @Test
+    void checkKeepsAnUpdateTheGameConfirmedItLaunched(@TempDir Path dir) throws IOException {
+        // The post-exit hook does not run when a mod wedges the JVM on shutdown and
+        // the process has to be killed, so pre-launch is where the marker gets read.
+        // Reverting here regardless meant the same mods reinstalled every launch.
+        Path mods = modsWithToken(dir);
+        pendingUpdate(mods, System.currentTimeMillis() - 1000);
+        Files.writeString(mods.resolve(".modupdater").resolve("launch-ok"),
+                String.valueOf(System.currentTimeMillis()));
+
+        assertEquals(0, Main.run(new String[]{"check", "--mods-dir", mods.toString()}));
+
+        assertEquals("new bytes", Files.readString(mods.resolve("examplemod.jar")),
+                "a launch the game confirmed must not be rolled back");
+    }
+
+    @Test
+    void checkKeepsAnUpdateThatSurvivedALongSession(@TempDir Path dir) throws IOException {
+        // No marker — the instance has no in-game mod — but the update was installed
+        // hours ago, so it plainly did not crash on init.
+        Path mods = modsWithToken(dir);
+        pendingUpdate(mods, System.currentTimeMillis() - Duration.ofHours(8).toMillis());
+
+        assertEquals(0, Main.run(new String[]{"check", "--mods-dir", mods.toString()}));
+
+        assertEquals("new bytes", Files.readString(mods.resolve("examplemod.jar")));
+    }
+
+    @Test
+    void checkStillRollsBackAJarThatCrashedOnInit(@TempDir Path dir) throws IOException {
+        // Installed seconds ago, no marker, and here we are launching again.
+        Path mods = modsWithToken(dir);
+        pendingUpdate(mods, System.currentTimeMillis() - 5000);
+
+        assertEquals(0, Main.run(new String[]{"check", "--mods-dir", mods.toString()}));
+
+        assertEquals("old bytes", Files.readString(mods.resolve("examplemod.jar")),
+                "an unconfirmed update installed moments ago is still a failed launch");
     }
 
     @Test
