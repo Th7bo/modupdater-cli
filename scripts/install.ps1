@@ -312,30 +312,11 @@ foreach ($idx in $chosen) {
             Write-Warn '  Close and reopen Prism so it picks up the change.'
         }
     } else {
-        # Modrinth App sets none of Prism's INST_* variables, so the shared
-        # wrappers would fall back to the current directory and read the mods of
-        # whatever the launcher happened to start in. These bake this instance's
-        # path in, which also means the hook value is just a path with no
-        # arguments for the launcher to mangle.
         $manualNeeded = $true
-        $instPre = Join-Path $stateDir 'check.bat'
-        $instPost = Join-Path $stateDir 'apply.bat'
-
-        foreach ($mode in @(@('check', $instPre), @('apply', $instPost))) {
-            Set-Content -LiteralPath $mode[1] -Encoding Default -Value @(
-                '@echo off',
-                ('set "MODUPDATER_MODS_DIR=' + $modsDir + '"'),
-                ('call "' + (Join-Path $installDir 'modupdater.bat') + '" ' + $mode[0]),
-                'exit /b %errorlevel%'
-            )
-        }
-
         Write-Host "  Modrinth App can't be configured automatically."
         Write-Host '  Open the instance''s Options > Hooks and paste:'
-        Write-Host "    Pre-launch: $instPre" -ForegroundColor White
-        Write-Host "    Post-exit:  $instPost" -ForegroundColor White
-        Write-Host '  If a field will not stick: click outside it, then fully quit'
-        Write-Host '  and reopen Modrinth App before checking again.'
+        Write-Host "    Pre-launch: $preHook"
+        Write-Host "    Post-exit:  $postHook"
     }
 
     $wantMod = Read-Host '  Also install the in-game notifier, so updates show up while you play? [Y/n]'
