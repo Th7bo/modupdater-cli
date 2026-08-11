@@ -7,6 +7,7 @@ import javax.swing.BorderFactory;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
 import javax.swing.JButton;
+import javax.swing.JCheckBox;
 import javax.swing.JDialog;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
@@ -16,8 +17,11 @@ import javax.swing.SwingUtilities;
 import javax.swing.Timer;
 import javax.swing.WindowConstants;
 import javax.swing.table.AbstractTableModel;
+import javax.swing.table.DefaultTableCellRenderer;
+import javax.swing.table.JTableHeader;
 import java.awt.BorderLayout;
 import java.awt.Dimension;
+import java.awt.Font;
 import java.awt.MouseInfo;
 import java.awt.PointerInfo;
 import java.awt.Rectangle;
@@ -51,6 +55,9 @@ public final class UpdateDialog {
     private static final int ANSWER_TIMEOUT_MS =
             Integer.getInteger("modupdater.dialogTimeoutMs", 120_000);
 
+    /** The commit summary column, rendered muted as secondary information. */
+    private static final int COLUMN_CHANGE = 7;
+
     private UpdateDialog() {
     }
 
@@ -68,23 +75,48 @@ public final class UpdateDialog {
     }
 
     private static Choice build(DialogViewModel model) {
+        Theme.apply();
+
         JDialog dialog = new JDialog((java.awt.Frame) null, "Mod updates available", true);
         dialog.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
+        dialog.getContentPane().setBackground(Theme.BACKGROUND);
 
         ModTableModel tableModel = new ModTableModel(model);
-        JTable table = new JTable(tableModel);
-        table.setRowHeight(24);
-        table.getColumnModel().getColumn(0).setMaxWidth(34);
+        JTable table = buildTable(tableModel, model);
+
+        int count = model.rows().size();
+        JLabel title = new JLabel(count + (count == 1 ? " mod can be updated" : " mods can be updated"));
+        title.setFont(title.getFont().deriveFont(Font.BOLD, 17f));
+        title.setForeground(Theme.TEXT);
+
+        JLabel subtitle = new JLabel("Choose which to install before the game starts.");
+        subtitle.setFont(subtitle.getFont().deriveFont(12f));
+        subtitle.setForeground(Theme.TEXT_MUTED);
+        subtitle.setBorder(BorderFactory.createEmptyBorder(4, 0, 0, 0));
+
+        JPanel heading = new JPanel();
+        heading.setOpaque(false);
+        heading.setLayout(new BoxLayout(heading, BoxLayout.Y_AXIS));
+        title.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
+        subtitle.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
+        heading.add(title);
+        heading.add(subtitle);
 
         JPanel header = new JPanel(new BorderLayout());
-        header.setBorder(BorderFactory.createEmptyBorder(12, 12, 8, 12));
-        header.add(new JLabel(model.rows().size() + " mod(s) have a newer build available."), BorderLayout.WEST);
+        header.setBackground(Theme.BACKGROUND);
+        header.setBorder(BorderFactory.createEmptyBorder(18, 20, 14, 20));
+        header.add(heading, BorderLayout.WEST);
 
         JButton selectAll = new JButton("Select all");
         JButton selectNone = new JButton("Select none");
         JButton update = new JButton("Update and launch");
         JButton skip = new JButton("Launch without updating");
         JButton abort = new JButton("Cancel launch");
+
+        for (JButton button : List.of(selectAll, selectNone, skip, abort)) {
+            Theme.styleButton(button, false);
+        }
+        Theme.styleButton(update, true);
 
         AtomicReference<Choice> choice = new AtomicReference<>(new Choice.Skip());
 
@@ -128,15 +160,25 @@ public final class UpdateDialog {
         right.add(update);
 
         JPanel buttons = new JPanel(new BorderLayout());
-        buttons.setBorder(BorderFactory.createEmptyBorder(8, 12, 12, 12));
+        buttons.setBackground(Theme.BACKGROUND);
+        buttons.setBorder(BorderFactory.createEmptyBorder(14, 20, 18, 20));
         buttons.add(left, BorderLayout.WEST);
         buttons.add(right, BorderLayout.EAST);
 
+        JScrollPane scroll = new JScrollPane(table);
+        scroll.setBorder(BorderFactory.createLineBorder(Theme.BORDER));
+        scroll.getViewport().setBackground(Theme.SURFACE);
+
+        JPanel body = new JPanel(new BorderLayout());
+        body.setBackground(Theme.BACKGROUND);
+        body.setBorder(BorderFactory.createEmptyBorder(0, 20, 0, 20));
+        body.add(scroll, BorderLayout.CENTER);
+
         dialog.setLayout(new BorderLayout());
         dialog.add(header, BorderLayout.NORTH);
-        dialog.add(new JScrollPane(table), BorderLayout.CENTER);
+        dialog.add(body, BorderLayout.CENTER);
         dialog.add(buttons, BorderLayout.SOUTH);
-        dialog.setPreferredSize(new Dimension(940, 380));
+        dialog.setPreferredSize(new Dimension(1000, 420));
         dialog.pack();
         placeOnActiveScreen(dialog);
 
@@ -164,6 +206,81 @@ public final class UpdateDialog {
         timeout.stop();
 
         return choice.get();
+    }
+
+    private static JTable buildTable(ModTableModel tableModel, DialogViewModel model) {
+        JTable table = new JTable(tableModel);
+        table.setRowHeight(30);
+        table.setShowVerticalLines(false);
+        table.setShowHorizontalLines(false);
+        table.setIntercellSpacing(new Dimension(0, 0));
+        table.setBackground(Theme.SURFACE);
+        table.setForeground(Theme.TEXT);
+        table.setSelectionBackground(Theme.SELECTION);
+        table.setSelectionForeground(Theme.TEXT);
+        table.setFillsViewportHeight(true);
+
+        JTableHeader tableHeader = table.getTableHeader();
+        tableHeader.setReorderingAllowed(false);
+        tableHeader.setFont(tableHeader.getFont().deriveFont(Font.BOLD, 12f));
+        tableHeader.setBackground(Theme.BACKGROUND);
+        tableHeader.setForeground(Theme.TEXT_MUTED);
+        tableHeader.setBorder(BorderFactory.createMatteBorder(0, 0, 1, 0, Theme.BORDER));
+        // The header's own renderer ships platform colours, which is what made it
+        // a light grey bar across a dark window.
+        tableHeader.setDefaultRenderer((t, value, selected, focused, row, column) -> {
+            JLabel label = new JLabel(value == null ? "" : value.toString());
+            label.setOpaque(true);
+            label.setBackground(Theme.BACKGROUND);
+            label.setForeground(Theme.TEXT_MUTED);
+            label.setFont(t.getTableHeader().getFont());
+            label.setBorder(BorderFactory.createCompoundBorder(
+                    BorderFactory.createMatteBorder(0, 0, 1, 0, Theme.BORDER),
+                    BorderFactory.createEmptyBorder(6, 10, 6, 10)));
+            return label;
+        });
+
+        // Zebra striping, so a long list of mods stays readable across columns.
+        DefaultTableCellRenderer striped = new DefaultTableCellRenderer() {
+            @Override
+            public java.awt.Component getTableCellRendererComponent(
+                    JTable t, Object value, boolean selected, boolean focused, int row, int column) {
+                java.awt.Component cell =
+                        super.getTableCellRendererComponent(t, value, selected, focused, row, column);
+                if (!selected) {
+                    cell.setBackground(row % 2 == 0 ? Theme.SURFACE : Theme.ROW_ALT);
+                }
+                cell.setForeground(column == COLUMN_CHANGE ? Theme.TEXT_MUTED : Theme.TEXT);
+                setBorder(BorderFactory.createEmptyBorder(0, 10, 0, 10));
+                return cell;
+            }
+        };
+
+        for (int column = 1; column < tableModel.getColumnCount(); column++) {
+            table.getColumnModel().getColumn(column).setCellRenderer(striped);
+        }
+
+        // The checkbox column needs the same striping, or it sits on the look
+        // and feel's own background and reads as a separate panel.
+        JCheckBox checkBox = new JCheckBox();
+        checkBox.setHorizontalAlignment(JCheckBox.CENTER);
+        checkBox.setOpaque(true);
+        table.getColumnModel().getColumn(0).setCellRenderer((t, value, selected, focused, row, column) -> {
+            checkBox.setSelected(Boolean.TRUE.equals(value));
+            checkBox.setBackground(selected
+                    ? Theme.SELECTION
+                    : (row % 2 == 0 ? Theme.SURFACE : Theme.ROW_ALT));
+            checkBox.setForeground(Theme.TEXT);
+            return checkBox;
+        });
+
+        int[] widths = {36, 200, 150, 130, 190, 90, 90, 320};
+        for (int column = 0; column < widths.length; column++) {
+            table.getColumnModel().getColumn(column).setPreferredWidth(widths[column]);
+        }
+        table.getColumnModel().getColumn(0).setMaxWidth(36);
+
+        return table;
     }
 
     /**

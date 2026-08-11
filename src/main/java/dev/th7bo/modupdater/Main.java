@@ -36,6 +36,19 @@ public final class Main {
     private static final Duration MIN_HEALTHY_SESSION = Duration.ofMinutes(2);
 
     public static void main(String[] args) {
+        // Must happen before any AWT class loads, or the toolkit caches the
+        // defaults and text renders without antialiasing — which is what makes
+        // Swing look pixelated next to every other window on the desktop.
+        System.setProperty("awt.useSystemAAFontSettings", "on");
+        System.setProperty("swing.aatext", "true");
+
+        // No reliable way to detect display scaling on Wayland via XWayland when
+        // Xft.dpi is unset, so leave an override for anyone on a HiDPI screen.
+        String uiScale = System.getenv("MODUPDATER_UI_SCALE");
+        if (uiScale != null && !uiScale.isBlank()) {
+            System.setProperty("sun.java2d.uiScale", uiScale.trim());
+        }
+
         int code = OK;
         try {
             code = run(args);
