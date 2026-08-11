@@ -64,6 +64,29 @@ public final class ModrinthHooks {
     }
 
     /**
+     * Turns a path into a hook command Modrinth can actually run.
+     *
+     * <p>It splits hooks with {@code shlex}, POSIX shell tokenising, before
+     * spawning. A bare Windows path therefore loses every backslash —
+     * {@code C:\Users\me\check.bat} becomes {@code C:Usersmecheck.bat} — which is
+     * drive-relative, so the launcher resolves it against the instance folder and
+     * reports "program not found" naming a directory nobody typed. Single quotes
+     * are literal to shlex, and they also keep a path containing spaces in one
+     * piece.
+     *
+     * <p>Batch files additionally go through {@code cmd /c}: Windows cannot execute
+     * a {@code .bat} as a process image directly.
+     */
+    static String hookCommand(String path) {
+        // Close the quoted run, add an escaped quote, reopen: the only way to put
+        // a single quote inside single quotes.
+        String quoted = "'" + path.replace("'", "'\\''") + "'";
+
+        String lower = path.toLowerCase();
+        return lower.endsWith(".bat") || lower.endsWith(".cmd") ? "cmd /c " + quoted : quoted;
+    }
+
+    /**
      * A Modrinth game directory is {@code <data>/profiles/<folder>}, and the
      * database sits beside {@code profiles}.
      */
@@ -75,7 +98,10 @@ public final class ModrinthHooks {
         return profiles.getParent().resolve("app.db");
     }
 
-    public static Result configure(Path gameDir, String preLaunch, String postExit) {
+    public static Result configure(Path gameDir, String preLaunchPath, String postExitPath) {
+        String preLaunch = hookCommand(preLaunchPath);
+        String postExit = hookCommand(postExitPath);
+
         Path database = databaseFor(gameDir);
         if (database == null || !Files.isRegularFile(database)) {
             return new Result.NoDatabase(database == null ? gameDir : database);

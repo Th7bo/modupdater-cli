@@ -61,6 +61,43 @@ class ModrinthHooksTest {
     }
 
     @Test
+    void quotesWindowsPathsSoShlexKeepsTheBackslashes() {
+        // Modrinth splits hooks with shlex before spawning. Unquoted, every
+        // backslash is an escape character and the path collapses to
+        // "C:UsersfabiaAppDataLocalmodupdatercheck.bat" — drive-relative, so the
+        // launcher looks for it inside the instance folder and reports
+        // "program not found" naming a directory the user never typed.
+        String command = ModrinthHooks.hookCommand("C:\\Users\\fabia\\AppData\\Local\\modupdater\\check.bat");
+
+        assertEquals("cmd /c 'C:\\Users\\fabia\\AppData\\Local\\modupdater\\check.bat'", command);
+    }
+
+    @Test
+    void runsBatchFilesThroughCmd() {
+        // Windows cannot execute a .bat as a process image directly.
+        assertTrue(ModrinthHooks.hookCommand("C:\\x\\apply.cmd").startsWith("cmd /c "));
+        assertTrue(ModrinthHooks.hookCommand("C:\\x\\apply.bat").startsWith("cmd /c "));
+    }
+
+    @Test
+    void quotesUnixPathsWithoutCmd() {
+        assertEquals("'/home/me/.local/share/modupdater/check.sh'",
+                ModrinthHooks.hookCommand("/home/me/.local/share/modupdater/check.sh"));
+    }
+
+    @Test
+    void keepsAPathWithSpacesInOnePiece() {
+        assertEquals("'/home/me/My Games/check.sh'", ModrinthHooks.hookCommand("/home/me/My Games/check.sh"));
+    }
+
+    @Test
+    void escapesASingleQuoteInThePath() {
+        // Rare, but legal in both Windows and Linux paths, and it would otherwise
+        // end the quoted run and turn the rest into separate arguments.
+        assertEquals("'/home/o'\\''brien/check.sh'", ModrinthHooks.hookCommand("/home/o'brien/check.sh"));
+    }
+
+    @Test
     void writesBothHooksWhenModrinthLeftThemNull(@TempDir Path root) throws Exception {
         // Exactly what the UI leaves behind: the record exists, the values do not.
         Path gameDir = modrinthWith(root, "Skyblock 1.0.0", "Skyblock",
@@ -69,8 +106,8 @@ class ModrinthHooksTest {
         var result = ModrinthHooks.configure(gameDir, "C:\\mu\\check.bat", "C:\\mu\\apply.bat");
 
         assertInstanceOf(ModrinthHooks.Result.Configured.class, result);
-        assertEquals("C:\\mu\\check.bat", hook(root, "pre_launch"));
-        assertEquals("C:\\mu\\apply.bat", hook(root, "post_exit"));
+        assertEquals("cmd /c 'C:\\mu\\check.bat'", hook(root, "pre_launch"));
+        assertEquals("cmd /c 'C:\\mu\\apply.bat'", hook(root, "post_exit"));
     }
 
     @Test
@@ -80,7 +117,7 @@ class ModrinthHooksTest {
         var result = ModrinthHooks.configure(gameDir, "/home/x/check.sh", "/home/x/apply.sh");
 
         assertInstanceOf(ModrinthHooks.Result.Configured.class, result);
-        assertEquals("/home/x/check.sh", hook(root, "pre_launch"));
+        assertEquals("'/home/x/check.sh'", hook(root, "pre_launch"));
     }
 
     @Test
@@ -178,7 +215,7 @@ class ModrinthHooksTest {
         var result = ModrinthHooks.configure(gameDir, "/x/check.sh", "/x/apply.sh");
 
         assertInstanceOf(ModrinthHooks.Result.Configured.class, result);
-        assertEquals("/x/check.sh", hook(root, "pre_launch"));
+        assertEquals("'/x/check.sh'", hook(root, "pre_launch"));
     }
 
     @Test
@@ -189,7 +226,7 @@ class ModrinthHooksTest {
         var second = ModrinthHooks.configure(gameDir, "/x/check.sh", "/x/apply.sh");
 
         assertInstanceOf(ModrinthHooks.Result.Configured.class, second);
-        assertEquals("/x/check.sh", hook(root, "pre_launch"));
+        assertEquals("'/x/check.sh'", hook(root, "pre_launch"));
 
         try (Connection c = DriverManager.getConnection("jdbc:sqlite:" + root.resolve("app.db"));
              Statement s = c.createStatement();
