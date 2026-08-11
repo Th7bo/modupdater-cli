@@ -270,11 +270,28 @@ for idx in "${chosen[@]}"; do
                 ;;
         esac
     else
+        # Modrinth App sets none of Prism's INST_* variables, so the shared
+        # wrappers would fall back to the current directory and read the mods of
+        # whatever the launcher happened to start in. These bake this instance's
+        # path in, and still take no arguments for the launcher to mangle.
         manual_needed=1
+
+        for mode in check apply; do
+            target="$mods_dir/.modupdater/$mode.sh"
+            {
+                echo '#!/usr/bin/env bash'
+                echo "export MODUPDATER_MODS_DIR=\"$mods_dir\""
+                echo "exec \"$INSTALL_DIR/modupdater.sh\" $mode"
+            } > "$target"
+            chmod +x "$target"
+        done
+
         echo "  Modrinth App can't be configured automatically."
         echo "  Open the instance's Options > Hooks and paste:"
-        echo "    Pre-launch: $PRE_HOOK"
-        echo "    Post-exit:  $POST_HOOK"
+        echo "    Pre-launch: $mods_dir/.modupdater/check.sh"
+        echo "    Post-exit:  $mods_dir/.modupdater/apply.sh"
+        echo "  If a field will not stick: click outside it, then fully quit"
+        echo "  and reopen Modrinth App before checking again."
     fi
 
     printf '  Also install the in-game notifier, so updates show up while you play? [Y/n]: '
