@@ -26,6 +26,9 @@ import java.util.Map;
 public final class Installer {
 
     public static final String STATE_DIR = ".modupdater";
+
+    /** Written by the in-game mod once the client has actually loaded. */
+    public static final String LAUNCH_MARKER = "launch-ok";
     private static final String STAGING_DIR = "staging";
     private static final String BACKUP_DIR = "backup";
 
@@ -52,7 +55,16 @@ public final class Installer {
         return modsDir.resolve(STATE_DIR);
     }
 
+    /** Installs what the pre-launch dialog chose. */
     public Outcome install(List<UpdateCandidate> chosen, Path modsDir, String token) {
+        if (chosen == null || chosen.isEmpty()) {
+            return new Outcome(List.of(), Map.of());
+        }
+        return installItems(InstallItem.of(chosen), modsDir, token);
+    }
+
+    /** Installs a prepared set of JARs, whatever decided on them. */
+    public Outcome installItems(List<InstallItem> chosen, Path modsDir, String token) {
         List<String> installed = new ArrayList<>();
         Map<String, String> failures = new LinkedHashMap<>();
         List<PendingState.Entry> entries = new ArrayList<>();
@@ -78,22 +90,22 @@ public final class Installer {
             return new Outcome(installed, Map.of("*", String.valueOf(e.getMessage())));
         }
 
-        for (UpdateCandidate candidate : chosen) {
-            String filename = candidate.version().filename();
+        for (InstallItem candidate : chosen) {
+            String filename = candidate.filename();
             Path staged = staging.resolve(filename);
 
             try {
-                downloader.download(candidate.version().downloadUrl(), token, staged);
+                downloader.download(candidate.downloadUrl(), token, staged);
 
                 String actual = Hashing.sha256(staged);
-                if (!actual.equalsIgnoreCase(candidate.version().sha256())) {
+                if (!actual.equalsIgnoreCase(candidate.sha256())) {
                     Files.deleteIfExists(staged);
                     failures.put(filename, "checksum mismatch — discarded");
                     Log.error(filename + " failed checksum verification, not installed");
                     continue;
                 }
 
-                Path replaced = candidate.installed().path();
+                Path replaced = candidate.replaces();
                 Path backedUp = backup.resolve(replaced.getFileName().toString());
                 Files.move(replaced, backedUp, StandardCopyOption.REPLACE_EXISTING);
 
@@ -116,8 +128,13 @@ public final class Installer {
                 Log.info("installed " + filename);
 
             } catch (IOException e) {
-                failures.put(filename, String.valueOf(e.getMessage()));
-                Log.error("could not install " + filename + ": " + e.getMessage());
+                // Some IOExceptions carry no message at all — a bare "null" in the
+                // log says nothing about what went wrong.
+                String reason = e.getMessage() == null || e.getMessage().isBlank()
+                        ? e.getClass().getSimpleName()
+                        : e.getMessage();
+                failures.put(filename, reason);
+                Log.error("could not install " + filename + ": " + reason);
                 try {
                     Files.deleteIfExists(staged);
                 } catch (IOException ignored) {
@@ -203,25 +220,63 @@ public final class Installer {
     /**
      * Post-exit decision: did the session that followed an update actually work?
      *
-     * <p>The hook fires either way, so a session shorter than {@code minSession}
-     * is treated as a failed launch and rolled back. A crash on init returns in
-     * seconds; a real session does not.
+     * <p>When the in-game mod is installed it leaves a marker as soon as the
+     * client is up, which answers the question outright. Without it there is only
+     * elapsed time: the hook fires whether the game played or died on init, so a
+     * short session is read as a failed launch. That misfires on a deliberate
+     * quick quit, which is the reason the marker exists.
      */
     public static SessionOutcome resolveAfterSession(Path modsDir, Duration minSession, long nowMillis) {
-        PendingState pending = PendingState.read(stateDir(modsDir));
+        Path state = stateDir(modsDir);
+        PendingState pending = PendingState.read(state);
 
         if (!pending.awaitingConfirmation()) {
+            clearLaunchMarker(state);
             return new SessionOutcome.NothingPending();
+        }
+
+        if (launchMarked(state, pending)) {
+            confirmLaunch(modsDir);
+            clearLaunchMarker(state);
+            return new SessionOutcome.Confirmed(pending.entries().size());
         }
 
         long lasted = pending.sessionMillis(nowMillis);
         if (lasted >= minSession.toMillis()) {
             confirmLaunch(modsDir);
+            clearLaunchMarker(state);
             return new SessionOutcome.Confirmed(pending.entries().size());
         }
 
         Log.warn("the game exited " + (lasted / 1000) + "s after updating — treating it as a failed launch");
         return new SessionOutcome.RolledBack(restoreIfUnconfirmed(modsDir));
+    }
+
+    /**
+     * Whether the mod reported a successful load *for this install*.
+     *
+     * <p>The timestamp check matters: a marker left by an earlier session would
+     * otherwise confirm an update that has not been launched yet.
+     */
+    private static boolean launchMarked(Path stateDir, PendingState pending) {
+        Path marker = stateDir.resolve(LAUNCH_MARKER);
+        if (!Files.isRegularFile(marker)) {
+            return false;
+        }
+
+        try {
+            return Files.getLastModifiedTime(marker).toMillis() >= pending.installedAtMillis();
+        } catch (IOException e) {
+            return false;
+        }
+    }
+
+    private static void clearLaunchMarker(Path stateDir) {
+        try {
+            Files.deleteIfExists(stateDir.resolve(LAUNCH_MARKER));
+        } catch (IOException e) {
+            // best effort; a stale marker is caught by the timestamp check
+        }
     }
 
     private static void deleteRecursively(Path dir) throws IOException {

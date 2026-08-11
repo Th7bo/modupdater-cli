@@ -4,6 +4,7 @@ import dev.th7bo.modupdater.diff.Differ;
 import dev.th7bo.modupdater.diff.UpdateCandidate;
 import dev.th7bo.modupdater.install.Downloader;
 import dev.th7bo.modupdater.install.Installer;
+import dev.th7bo.modupdater.install.UpdateRequest;
 import dev.th7bo.modupdater.instance.InstalledMod;
 import dev.th7bo.modupdater.instance.InstanceScanner;
 import dev.th7bo.modupdater.manifest.FetchResult;
@@ -14,6 +15,7 @@ import dev.th7bo.modupdater.ui.DialogViewModel;
 import dev.th7bo.modupdater.ui.UpdateDialog;
 import dev.th7bo.modupdater.util.Log;
 
+import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
 
@@ -169,6 +171,9 @@ public final class Main {
     }
 
     private static int apply(Config config) {
+        // Settle the session that just ended before acting on anything new: that
+        // decision is about the update already on disk, and installing first would
+        // overwrite the state it is judged by.
         Installer.SessionOutcome outcome = Installer.resolveAfterSession(
                 config.modsDir(), MIN_HEALTHY_SESSION, System.currentTimeMillis());
 
@@ -181,8 +186,47 @@ public final class Main {
                             + String.join(", ", rolledBack.modIds()));
         }
 
+        applyRequest(config);
+
         relaunch(config);
         return OK;
+    }
+
+    /**
+     * Carries out whatever the in-game mod asked for.
+     *
+     * @return true when something was installed
+     */
+    private static boolean applyRequest(Config config) {
+        Path stateDir = Installer.stateDir(config.modsDir());
+        UpdateRequest request = UpdateRequest.read(stateDir);
+
+        if (request == null) {
+            return false;
+        }
+
+        // Cleared first. A request that fails halfway must not be retried forever
+        // on every subsequent exit; the mod will simply offer the update again.
+        UpdateRequest.clear(stateDir);
+
+        String token = config.readToken();
+        if (token == null) {
+            Log.warn("an update was requested in-game but no token is configured");
+            return false;
+        }
+
+        Log.info("installing " + request.entries().size() + " update(s) requested in-game");
+
+        Installer.Outcome outcome =
+                new Installer(Downloader.http()).installItems(request.items(), config.modsDir(), token);
+
+        outcome.failures().forEach((filename, reason) -> Log.error(filename + ": " + reason));
+
+        if (outcome.anyInstalled()) {
+            Log.info("installed " + outcome.installed().size() + " update(s)");
+        }
+
+        return outcome.anyInstalled();
     }
 
     private static void relaunch(Config config) {

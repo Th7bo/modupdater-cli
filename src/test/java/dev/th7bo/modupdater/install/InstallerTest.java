@@ -195,6 +195,67 @@ class InstallerTest {
     }
 
     @Test
+    void confirmsImmediatelyWhenTheModReportsASuccessfulLoad(@TempDir Path modsDir) throws IOException {
+        Path old = oldJar(modsDir);
+        new Installer(serving(NEW_CONTENT))
+                .install(List.of(candidate(old, "examplemod-2.0.0.jar", sha256Of(NEW_CONTENT))), modsDir, "t");
+
+        // The in-game mod leaves this as soon as the client is up, so a deliberate
+        // quick quit is no longer mistaken for a crash on init.
+        Files.writeString(Installer.stateDir(modsDir).resolve(Installer.LAUNCH_MARKER), "ok");
+
+        var outcome = Installer.resolveAfterSession(modsDir, Duration.ofMinutes(2), System.currentTimeMillis());
+
+        assertInstanceOf(Installer.SessionOutcome.Confirmed.class, outcome);
+        assertEquals(NEW_CONTENT, Files.readString(modsDir.resolve("examplemod-2.0.0.jar")));
+    }
+
+    @Test
+    void ignoresAMarkerLeftBeforeThisInstall(@TempDir Path modsDir) throws IOException {
+        Path stateDir = Installer.stateDir(modsDir);
+        Files.createDirectories(stateDir);
+        Path marker = stateDir.resolve(Installer.LAUNCH_MARKER);
+        Files.writeString(marker, "ok");
+        Files.setLastModifiedTime(marker, java.nio.file.attribute.FileTime.fromMillis(1_000));
+
+        Path old = oldJar(modsDir);
+        new Installer(serving(NEW_CONTENT))
+                .install(List.of(candidate(old, "examplemod-2.0.0.jar", sha256Of(NEW_CONTENT))), modsDir, "t");
+
+        var outcome = Installer.resolveAfterSession(modsDir, Duration.ofMinutes(2), System.currentTimeMillis());
+
+        assertInstanceOf(Installer.SessionOutcome.RolledBack.class, outcome);
+        assertEquals(OLD_CONTENT, Files.readString(old), "a stale marker must not confirm an unlaunched update");
+    }
+
+    @Test
+    void installsItemsPreparedElsewhere(@TempDir Path modsDir) throws IOException {
+        Path old = oldJar(modsDir);
+        InstallItem item = new InstallItem(
+                "examplemod", "examplemod-2.0.0.jar", sha256Of(NEW_CONTENT), "http://example.test/m.jar", old);
+
+        Installer.Outcome outcome =
+                new Installer(serving(NEW_CONTENT)).installItems(List.of(item), modsDir, "t");
+
+        assertEquals(List.of("examplemod-2.0.0.jar"), outcome.installed());
+        assertEquals(NEW_CONTENT, Files.readString(modsDir.resolve("examplemod-2.0.0.jar")));
+        assertFalse(Files.exists(old));
+    }
+
+    @Test
+    void verifiesItemsPreparedElsewhereToo(@TempDir Path modsDir) throws IOException {
+        Path old = oldJar(modsDir);
+        InstallItem item = new InstallItem(
+                "examplemod", "examplemod-2.0.0.jar", "not-the-real-hash", "http://example.test/m.jar", old);
+
+        Installer.Outcome outcome =
+                new Installer(serving(NEW_CONTENT)).installItems(List.of(item), modsDir, "t");
+
+        assertTrue(outcome.installed().isEmpty());
+        assertEquals(OLD_CONTENT, Files.readString(old));
+    }
+
+    @Test
     void reportsNothingPendingWhenNoUpdateHappened(@TempDir Path modsDir) {
         var outcome = Installer.resolveAfterSession(modsDir, Duration.ofMinutes(2), System.currentTimeMillis());
 
