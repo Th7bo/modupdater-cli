@@ -19,7 +19,11 @@
 
 set -u
 
-COMMAND="${1:-check}"
+# Everything is forwarded, so the same wrapper serves the launcher hooks and a
+# person at a terminal running "modupdater.sh profile use dungeons".
+if [ "$#" -eq 0 ]; then
+    set -- check
+fi
 
 # Where this script and the JAR live.
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -42,7 +46,7 @@ if [ ! -f "$JAR" ]; then
     exit 0
 fi
 
-"$JAVA" -jar "$JAR" "$COMMAND" --mods-dir "$MODS_DIR"
+"$JAVA" -jar "$JAR" "$@" --mods-dir "$MODS_DIR"
 STATUS=$?
 
 # 1 means the user chose to cancel the launch; anything else is an updater

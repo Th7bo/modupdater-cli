@@ -54,6 +54,27 @@ public final class Theme {
         UIManager.put("Viewport.background", SURFACE);
         UIManager.put("ScrollBar.thumb", new Color(0x4A4D52));
         UIManager.put("ScrollBar.track", SURFACE);
+
+        // A combo box paints its closed state through its own UI delegate, which
+        // ignores setBackground — without these it stays a pale platform-blue bar
+        // hanging off a dark window.
+        UIManager.put("ComboBox.background", SURFACE);
+        UIManager.put("ComboBox.foreground", TEXT);
+        UIManager.put("ComboBox.selectionBackground", SELECTION);
+        UIManager.put("ComboBox.selectionForeground", TEXT);
+        UIManager.put("ComboBox.buttonBackground", SURFACE);
+        UIManager.put("ComboBox.buttonShadow", BORDER);
+        UIManager.put("ComboBox.buttonDarkShadow", BORDER);
+        UIManager.put("ComboBox.buttonHighlight", BORDER);
+        UIManager.put("ComboBox.disabledBackground", SURFACE);
+        UIManager.put("ComboBox.disabledForeground", TEXT_MUTED);
+        UIManager.put("List.background", SURFACE);
+        UIManager.put("List.foreground", TEXT);
+        UIManager.put("TextField.background", SURFACE);
+        UIManager.put("TextField.foreground", TEXT);
+        UIManager.put("TextField.caretForeground", TEXT);
+        UIManager.put("OptionPane.background", BACKGROUND);
+        UIManager.put("OptionPane.messageForeground", TEXT);
     }
 
     /** Flat, readable buttons — the default look is heavily bevelled. */
@@ -69,6 +90,46 @@ public final class Theme {
         if (primary) {
             button.setFont(button.getFont().deriveFont(Font.BOLD));
         }
+    }
+
+    /**
+     * A combo box that honours the dark palette.
+     *
+     * <p>Setting background and foreground is not enough on its own: the default
+     * renderer paints the popup's rows with the look and feel's own colours, which
+     * is what leaves a pale blue list hanging off a dark window.
+     */
+    public static void styleComboBox(javax.swing.JComboBox<?> combo) {
+        // The platform delegate paints the closed state itself and ignores
+        // setBackground, which leaves a pale blue bar on a dark window. The basic
+        // one honours both the colours and the renderer below.
+        combo.setUI(new javax.swing.plaf.basic.BasicComboBoxUI() {
+            @Override
+            protected javax.swing.JButton createArrowButton() {
+                javax.swing.JButton button = super.createArrowButton();
+                button.setBackground(SURFACE);
+                button.setBorder(javax.swing.BorderFactory.createEmptyBorder());
+                button.setFocusable(false);
+                return button;
+            }
+        });
+
+        combo.setBackground(SURFACE);
+        combo.setForeground(TEXT);
+        combo.setBorder(javax.swing.BorderFactory.createLineBorder(BORDER));
+
+        javax.swing.ListCellRenderer<Object> renderer = (list, value, index, selected, focused) -> {
+            javax.swing.JLabel label = new javax.swing.JLabel(value == null ? "" : value.toString());
+            label.setOpaque(true);
+            label.setBackground(selected ? SELECTION : SURFACE);
+            label.setForeground(TEXT);
+            label.setBorder(javax.swing.BorderFactory.createEmptyBorder(5, 8, 5, 8));
+            return label;
+        };
+
+        @SuppressWarnings("unchecked")
+        javax.swing.JComboBox<Object> untyped = (javax.swing.JComboBox<Object>) combo;
+        untyped.setRenderer(renderer);
     }
 
     private static String pickFont() {

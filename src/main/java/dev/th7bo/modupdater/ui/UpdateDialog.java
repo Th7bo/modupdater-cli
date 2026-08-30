@@ -53,6 +53,9 @@ public final class UpdateDialog {
     private static final int ANSWER_TIMEOUT_MS =
             Integer.getInteger("modupdater.dialogTimeoutMs", 120_000);
 
+    /** The mod name column, which also carries the mod's icon. */
+    private static final int COLUMN_MOD = 1;
+
     /** The commit summary column, rendered muted as secondary information. */
     private static final int COLUMN_CHANGE = 7;
 
@@ -104,6 +107,12 @@ public final class UpdateDialog {
         header.setBackground(Theme.BACKGROUND);
         header.setBorder(BorderFactory.createEmptyBorder(18, 20, 14, 20));
         header.add(heading, BorderLayout.WEST);
+
+        // Same window, one extra control — rather than a second dialog the user
+        // has to dismiss before the one they came for.
+        if (model.profilesOffered()) {
+            header.add(ProfilePicker.build(model), BorderLayout.EAST);
+        }
 
         JButton selectAll = new JButton("Select all");
         JButton selectNone = new JButton("Select none");
@@ -258,6 +267,26 @@ public final class UpdateDialog {
             table.getColumnModel().getColumn(column).setCellRenderer(striped);
         }
 
+        // The mod's own icon goes in the name cell rather than a column of its
+        // own: the picture and the name are one thing to read, and it keeps the
+        // column layout as it was.
+        table.getColumnModel().getColumn(COLUMN_MOD).setCellRenderer(new DefaultTableCellRenderer() {
+            @Override
+            public java.awt.Component getTableCellRendererComponent(
+                    JTable t, Object value, boolean selected, boolean focused, int row, int column) {
+                java.awt.Component cell =
+                        super.getTableCellRendererComponent(t, value, selected, focused, row, column);
+                if (!selected) {
+                    cell.setBackground(row % 2 == 0 ? Theme.SURFACE : Theme.ROW_ALT);
+                }
+                cell.setForeground(Theme.TEXT);
+                setIcon(model.rows().get(row).icon());
+                setIconTextGap(8);
+                setBorder(BorderFactory.createEmptyBorder(0, 10, 0, 10));
+                return cell;
+            }
+        });
+
         // The checkbox column needs the same striping, or it sits on the look
         // and feel's own background and reads as a separate panel.
         JCheckBox checkBox = new JCheckBox();
@@ -272,7 +301,7 @@ public final class UpdateDialog {
             return checkBox;
         });
 
-        int[] widths = {36, 200, 150, 130, 190, 90, 90, 320};
+        int[] widths = {36, 224, 150, 130, 190, 90, 90, 320};
         for (int column = 0; column < widths.length; column++) {
             table.getColumnModel().getColumn(column).setPreferredWidth(widths[column]);
         }

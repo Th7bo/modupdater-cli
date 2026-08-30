@@ -1,5 +1,6 @@
 package dev.th7bo.modupdater.install;
 
+import dev.th7bo.modupdater.instance.ModPaths;
 import dev.th7bo.modupdater.manifest.Manifest;
 import dev.th7bo.modupdater.util.Hashing;
 import dev.th7bo.modupdater.util.Log;
@@ -62,7 +63,7 @@ public final class ModInstaller {
             return new Result.AlreadyPresent(version.filename());
         }
 
-        Path staging = modsDir.resolve(Installer.STATE_DIR).resolve("staging");
+        Path staging = ModPaths.of(modsDir).stagingDir();
         Path staged = staging.resolve(version.filename());
 
         try {
