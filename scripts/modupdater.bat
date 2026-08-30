@@ -22,12 +22,15 @@ if "%MODUPDATER_JAR%"=="" (
     set "JAR=%MODUPDATER_JAR%"
 )
 
+REM Left empty on purpose when nothing says which instance this is: the updater
+REM falls back to .\mods by itself, and "modupdater profile enable" run from
+REM anywhere else uses the empty value as its cue to offer the instance menu.
 if not "%INST_MC_DIR%"=="" (
     set "MODS_DIR=%INST_MC_DIR%\mods"
 ) else if not "%MODUPDATER_MODS_DIR%"=="" (
     set "MODS_DIR=%MODUPDATER_MODS_DIR%"
 ) else (
-    set "MODS_DIR=%CD%\mods"
+    set "MODS_DIR="
 )
 
 set "JAVA=java"
@@ -38,7 +41,11 @@ if not exist "%JAR%" (
     exit /b 0
 )
 
-"%JAVA%" -jar "%JAR%" %ARGS% --mods-dir "%MODS_DIR%"
+if "%MODS_DIR%"=="" (
+    "%JAVA%" -jar "%JAR%" %ARGS%
+) else (
+    "%JAVA%" -jar "%JAR%" %ARGS% --mods-dir "%MODS_DIR%"
+)
 
 REM 1 means the user cancelled the launch. Every other failure must still let
 REM the game start.

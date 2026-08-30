@@ -13,9 +13,16 @@ import java.time.format.DateTimeFormatter;
  *
  * <p>Every message passes through {@link #redact} so a token can never reach the
  * log file even if it ends up inside an exception message or a URL.
+ *
+ * <p>The directory is created by the first line written, not by {@link #init}.
+ * {@code modupdater} is on PATH now, so a command like {@code profile list} runs
+ * from wherever the user is standing and its instance is only settled afterwards
+ * — creating the folder up front left a stray {@code mods/.modupdater} in
+ * whatever directory they happened to be in.
  */
 public final class Log {
 
+    private static Path stateDir;
     private static Path logFile;
     private static String secret;
 
@@ -23,18 +30,14 @@ public final class Log {
     }
 
     public static synchronized void init(Path stateDir, String tokenToRedact) {
-        secret = tokenToRedact;
-        try {
-            Files.createDirectories(stateDir);
-            logFile = stateDir.resolve("log.txt");
-        } catch (IOException e) {
-            logFile = null;
-            System.out.println("[modupdater] could not open log file: " + redact(e.getMessage()));
-        }
+        Log.stateDir = stateDir;
+        Log.logFile = null;
+        Log.secret = tokenToRedact;
     }
 
     /** Visible for testing: clears state between cases. */
     public static synchronized void reset() {
+        stateDir = null;
         logFile = null;
         secret = null;
     }
@@ -66,7 +69,7 @@ public final class Log {
         String line = "[modupdater] " + level + " " + safe;
         System.out.println(line);
 
-        if (logFile == null) {
+        if (!openLogFile()) {
             return;
         }
 
@@ -78,6 +81,27 @@ public final class Log {
         } catch (IOException e) {
             // A failing log must never take the process down.
             logFile = null;
+            stateDir = null;
+        }
+    }
+
+    /** @return false when there is nowhere to write, which is not an error */
+    private static boolean openLogFile() {
+        if (logFile != null) {
+            return true;
+        }
+        if (stateDir == null) {
+            return false;
+        }
+
+        try {
+            Files.createDirectories(stateDir);
+            logFile = stateDir.resolve("log.txt");
+            return true;
+        } catch (IOException e) {
+            stateDir = null;
+            System.out.println("[modupdater] could not open log file: " + redact(e.getMessage()));
+            return false;
         }
     }
 }
