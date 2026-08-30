@@ -84,13 +84,18 @@ public final class ManagerWindow {
     /** Suppresses the listeners that would otherwise fire while a pane is rebuilt. */
     private boolean loading;
 
-    private ManagerWindow(Config config) {
+    /** False while a launch is waiting on the dialog that opened this window. */
+    private final boolean canApply;
+
+    private ManagerWindow(Config config, java.awt.Window owner, boolean canApply) {
         this.config = config;
-        this.dialog = new JDialog((java.awt.Frame) null, "ModUpdater — mod profiles", true);
+        this.canApply = canApply;
+        this.dialog = new JDialog(owner, "ModUpdater — mod profiles",
+                JDialog.ModalityType.APPLICATION_MODAL);
         reload();
     }
 
-    /** Opens the window and returns once it is closed. */
+    /** Opens the window from a terminal, and returns once it is closed. */
     public static void open(Config config) {
         if (DialogViewModel.headless()) {
             Log.warn("no display available — 'modupdater profile edit' needs one."
@@ -99,8 +104,32 @@ public final class ManagerWindow {
         }
 
         try {
-            SwingUtilities.invokeAndWait(() -> new ManagerWindow(config).show());
+            SwingUtilities.invokeAndWait(() -> new ManagerWindow(config, null, true).show());
         } catch (Exception e) {
+            Log.error("could not open the profile manager: " + e);
+        }
+    }
+
+    /**
+     * Opens the window from a dialog that is already on screen — the pre-launch
+     * prompt's "Manage" button.
+     *
+     * <p>Already on the event thread, so it builds the window directly rather
+     * than going through {@code invokeAndWait}, which throws when called from
+     * there. Returns once the window is closed, since it is modal.
+     *
+     * <p>Applying a profile to the mods folder is withheld here. The launcher is
+     * blocked on the hook waiting for an answer, the update about to be installed
+     * refers to JARs by the path they are at now, and moving them out from under
+     * it would leave the installer looking for files that are no longer there.
+     * The profile picked in the dropdown is applied after the updates anyway,
+     * which is the whole flow — so the button would be redundant as well as
+     * unsafe.
+     */
+    static void openFrom(java.awt.Window owner, Config config) {
+        try {
+            new ManagerWindow(config, owner, false).show();
+        } catch (RuntimeException e) {
             Log.error("could not open the profile manager: " + e);
         }
     }
@@ -406,9 +435,17 @@ public final class ManagerWindow {
             updateStatus();
         });
 
-        JButton apply = new JButton("Apply to mods folder now");
+        JButton apply = new JButton(canApply
+                ? "Apply to mods folder now"
+                : "Applied when you launch");
         Theme.styleButton(apply, false);
-        apply.addActionListener(event -> applyNow(name));
+        apply.setEnabled(canApply);
+        if (canApply) {
+            apply.addActionListener(event -> applyNow(name));
+        } else {
+            apply.setToolTipText("The launch is waiting on the update prompt."
+                    + " Pick this profile there and it is applied as the game starts.");
+        }
         apply.setMaximumSize(apply.getPreferredSize());
 
         JPanel form = new JPanel();
