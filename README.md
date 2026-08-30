@@ -141,16 +141,24 @@ It is per instance, so the same setup can have it on for a laptop and off for a 
 
 ### Turning it on
 
-In the instance's `modupdater.properties`:
+```bash
+modupdater profile enable
+```
+
+That sets `profiles.enabled=true` in the instance's `modupdater.properties` — leaving your comments and everything else in it alone — and writes a starter `mods/.modupdater/profiles.json` with every mod you have in one group. Nothing moves until you split that group up, so enabling it cannot change which mods load.
+
+`modupdater profile disable` reverses it, and brings any stored mods back into `mods/` first so nothing is left behind. Your `profiles.json` is kept either way.
+
+The rest of the settings live in `modupdater.properties`:
 
 ```properties
-profiles.enabled=true    # off unless this says otherwise
+profiles.enabled=true    # what `profile enable` writes
 profile.default=general  # used when nothing is remembered
 profile.prompt=true      # ask at launch, or just apply the default
 profile.remember=true    # start from what you picked last time
 ```
 
-Then describe your mods in `mods/.modupdater/profiles.json`:
+Then edit `mods/.modupdater/profiles.json` into something like:
 
 ```json
 {
@@ -208,9 +216,11 @@ One JAR per mod. Switching profiles moves files between `mods/` and `mods/.modup
 ### Commands
 
 ```bash
+modupdater profile enable      # turn it on for this instance, with a starter config
 modupdater profile list        # groups, profiles, and what is applied now
 modupdater profile current
 modupdater profile use mining  # switch without launching
+modupdater profile disable     # turn it off, putting every stored mod back
 ```
 
 Same executable, same launcher hooks — `check` before launch, `apply` after exit, exactly as before. There is no second tool and no extra hook to add.
@@ -220,7 +230,7 @@ Same executable, same launcher hooks — `check` before launch, `apply` after ex
 - **Dependencies are not resolved.** If a mod needs a library, keep the library in a group every profile includes — `base` is what it is for. Nothing warns you about a missing dependency, because the manifest does not describe them.
 - A profile name that no longer exists, an unknown mod id, an unreadable `profiles.json` — each is logged and launches with everything active. Never a blocked launch.
 - A mod whose JAR turns up in both `mods/` and `inactive/` is left alone by profiles and reported, since which copy is real is not ours to guess. Delete the one you do not want.
-- Turning `profiles.enabled` back off leaves whatever is in `inactive/` where it is. Run `modupdater profile use everything` first if you want it all back.
+- Turn it off with `modupdater profile disable` rather than by editing the property: that puts every stored mod back into `mods/` first. Setting `profiles.enabled=false` by hand leaves them where they are, and the game will not load them.
 
 ## Exit codes
 

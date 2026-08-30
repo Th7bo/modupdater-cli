@@ -227,8 +227,8 @@ public final class Main {
 
         if (profiles.hasStrandedMods()) {
             Log.warn("profiles are switched off but mods are still stored in " + paths.inactiveDir()
-                    + " — the game will not load them. Set profiles.enabled=true to pick a profile,"
-                    + " or move them back into mods/ by hand.");
+                    + " — the game will not load them. Run 'modupdater profile enable' to pick a"
+                    + " profile again, or 'modupdater profile disable' to put them all back.");
         }
 
         List<UpdateCandidate> candidates = updateCandidates(config, inventory);

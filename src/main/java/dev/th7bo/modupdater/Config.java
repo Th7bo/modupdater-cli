@@ -96,6 +96,16 @@ public record Config(
         return baseUrl != null && !baseUrl.isBlank();
     }
 
+    /**
+     * This instance's {@code modupdater.properties}, whether or not it exists yet.
+     *
+     * @return null when {@code mods/} has no parent to put it beside
+     */
+    public Path propertiesFile() {
+        Path instanceDir = modsDir.getParent();
+        return instanceDir == null ? null : instanceDir.resolve(PROPERTIES_FILE);
+    }
+
     private static Map<String, String> parseFlags(String[] args) {
         Map<String, String> flags = new HashMap<>();
         if (args == null) {

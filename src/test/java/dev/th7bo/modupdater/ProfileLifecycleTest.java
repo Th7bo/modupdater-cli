@@ -225,6 +225,99 @@ class ProfileLifecycleTest {
         assertEquals(List.of(), namesIn(paths.inactiveDir()));
     }
 
+    // ── Turning it on and off ───────────────────────────────────────────────
+
+    @Test
+    void enableSwitchesTheFeatureOnAndLeavesAStarterConfig(@TempDir Path dir) throws IOException {
+        ModPaths paths = instance(dir);
+        properties(dir, "mc.version=1.21.4\n");
+
+        assertEquals(0, Main.run(new String[]{
+                "profile", "enable", "--mods-dir", paths.modsDir().toString()}));
+
+        Config config = Config.resolve(new String[]{"--mods-dir", paths.modsDir().toString()});
+        assertTrue(config.profilesEnabled());
+        assertEquals("1.21.4", config.mcVersion(), "the rest of the file is untouched");
+        assertTrue(Files.isRegularFile(paths.stateDir().resolve("profiles.json")));
+    }
+
+    @Test
+    void enablingMovesNothingByItself(@TempDir Path dir) throws IOException {
+        // The starter config puts every installed mod in one group, so switching
+        // the feature on cannot change which mods the game loads.
+        ModPaths paths = instance(dir);
+
+        Main.run(new String[]{"profile", "enable", "--mods-dir", paths.modsDir().toString()});
+        Main.run(new String[]{"check", "--mods-dir", paths.modsDir().toString()});
+
+        assertEquals(
+                List.of("bettermap.jar", "coleweight.jar", "fabric-api.jar", "skyhanni.jar"),
+                namesIn(paths.modsDir()));
+    }
+
+    @Test
+    void enableNeverOverwritesProfilesYouAlreadyHave(@TempDir Path dir) throws IOException {
+        ModPaths paths = instance(dir);
+        Files.createDirectories(paths.stateDir());
+        Files.writeString(paths.stateDir().resolve("profiles.json"), PROFILES);
+
+        Main.run(new String[]{"profile", "enable", "--mods-dir", paths.modsDir().toString()});
+
+        assertEquals(PROFILES, Files.readString(paths.stateDir().resolve("profiles.json")));
+    }
+
+    @Test
+    void disableBringsStoredModsBackBeforeSwitchingOff(@TempDir Path dir) throws IOException {
+        // Switching off first would strand them: the game would not load them, and
+        // nothing moves mods in an instance with profiles disabled.
+        ModPaths paths = instance(dir);
+        Files.createDirectories(paths.stateDir());
+        Files.writeString(paths.stateDir().resolve("profiles.json"), PROFILES);
+        properties(dir, "profiles.enabled=true\n");
+        String mods = paths.modsDir().toString();
+
+        Main.run(new String[]{"profile", "use", "mining", "--mods-dir", mods});
+        assertEquals(List.of("bettermap.jar"), namesIn(paths.inactiveDir()));
+
+        assertEquals(0, Main.run(new String[]{"profile", "disable", "--mods-dir", mods}));
+
+        assertEquals(
+                List.of("bettermap.jar", "coleweight.jar", "fabric-api.jar", "skyhanni.jar"),
+                namesIn(paths.modsDir()));
+        assertEquals(List.of(), namesIn(paths.inactiveDir()));
+        assertFalse(Config.resolve(new String[]{"--mods-dir", mods}).profilesEnabled());
+    }
+
+    @Test
+    void disableKeepsYourProfilesForNextTime(@TempDir Path dir) throws IOException {
+        ModPaths paths = instance(dir);
+        Files.createDirectories(paths.stateDir());
+        Files.writeString(paths.stateDir().resolve("profiles.json"), PROFILES);
+        properties(dir, "profiles.enabled=true\n");
+
+        Main.run(new String[]{"profile", "disable", "--mods-dir", paths.modsDir().toString()});
+
+        assertEquals(PROFILES, Files.readString(paths.stateDir().resolve("profiles.json")));
+    }
+
+    @Test
+    void turningItOffAndOnAgainIsSafe(@TempDir Path dir) throws IOException {
+        ModPaths paths = instance(dir);
+        Files.createDirectories(paths.stateDir());
+        Files.writeString(paths.stateDir().resolve("profiles.json"), PROFILES);
+        properties(dir, "profiles.enabled=true\n");
+        String mods = paths.modsDir().toString();
+
+        Main.run(new String[]{"profile", "use", "mining", "--mods-dir", mods});
+        Main.run(new String[]{"profile", "disable", "--mods-dir", mods});
+        Main.run(new String[]{"profile", "enable", "--mods-dir", mods});
+        Main.run(new String[]{"profile", "use", "dungeons", "--mods-dir", mods});
+
+        assertEquals(List.of("bettermap.jar", "fabric-api.jar", "skyhanni.jar"),
+                namesIn(paths.modsDir()));
+        assertEquals(List.of("coleweight.jar"), namesIn(paths.inactiveDir()));
+    }
+
     @Test
     void refusesToActOnProfilesWhenTheInstanceHasNotEnabledThem(@TempDir Path dir) throws IOException {
         ModPaths paths = instance(dir);
