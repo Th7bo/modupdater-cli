@@ -35,9 +35,29 @@ public final class InstanceDiscovery {
 
     public static InstanceDiscovery forThisMachine() {
         String appData = System.getenv("APPDATA");
-        return new InstanceDiscovery(
-                Path.of(System.getProperty("user.home")),
-                appData == null ? null : Path.of(appData));
+        return new InstanceDiscovery(home(), appData == null ? null : Path.of(appData));
+    }
+
+    /**
+     * $HOME first, and only then the JVM's own idea of it.
+     *
+     * <p>On Linux {@code user.home} comes from the passwd entry and ignores
+     * $HOME entirely, so a relocated home — a sandboxed shell, a Flatpak, an
+     * account whose files live elsewhere — searched the wrong one and offered
+     * instances belonging to the real home instead.
+     */
+    static Path home() {
+        String fromEnv = System.getenv("HOME");
+        if (fromEnv != null && !fromEnv.isBlank()) {
+            return Path.of(fromEnv);
+        }
+
+        String fromEnvWindows = System.getenv("USERPROFILE");
+        if (fromEnvWindows != null && !fromEnvWindows.isBlank()) {
+            return Path.of(fromEnvWindows);
+        }
+
+        return Path.of(System.getProperty("user.home"));
     }
 
     public List<Instance> discover() {
