@@ -1,5 +1,6 @@
 package dev.th7bo.modupdater.ui;
 
+import dev.th7bo.modupdater.Config;
 import dev.th7bo.modupdater.diff.UpdateCandidate;
 import dev.th7bo.modupdater.util.Log;
 
@@ -63,10 +64,18 @@ public final class UpdateDialog {
     }
 
     public static Choice show(DialogViewModel model) {
+        return show(model, null);
+    }
+
+    /**
+     * @param config the instance being launched, so the profile picker can offer
+     *               its Manage button; null leaves that button off
+     */
+    public static Choice show(DialogViewModel model, Config config) {
         AtomicReference<Choice> result = new AtomicReference<>(new Choice.Skip());
 
         try {
-            SwingUtilities.invokeAndWait(() -> result.set(build(model)));
+            SwingUtilities.invokeAndWait(() -> result.set(build(model, config)));
         } catch (Exception e) {
             // Never let a UI problem block the launch.
             return new Choice.Skip();
@@ -75,7 +84,7 @@ public final class UpdateDialog {
         return result.get();
     }
 
-    private static Choice build(DialogViewModel model) {
+    private static Choice build(DialogViewModel model, Config config) {
         Theme.apply();
 
         JDialog dialog = new JDialog((java.awt.Frame) null, "Mod updates available", true);
@@ -111,7 +120,7 @@ public final class UpdateDialog {
         // Same window, one extra control — rather than a second dialog the user
         // has to dismiss before the one they came for.
         if (model.profilesOffered()) {
-            header.add(ProfilePicker.build(model), BorderLayout.EAST);
+            header.add(ProfilePicker.build(model, config), BorderLayout.EAST);
         }
 
         JButton selectAll = new JButton("Select all");

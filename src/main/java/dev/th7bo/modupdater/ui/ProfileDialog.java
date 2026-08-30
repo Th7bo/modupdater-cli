@@ -1,5 +1,6 @@
 package dev.th7bo.modupdater.ui;
 
+import dev.th7bo.modupdater.Config;
 import dev.th7bo.modupdater.profile.ProfileConfig;
 import dev.th7bo.modupdater.util.Log;
 
@@ -48,11 +49,19 @@ public final class ProfileDialog {
     }
 
     public static Choice show(DialogViewModel model) {
+        return show(model, null);
+    }
+
+    /**
+     * @param config the instance being launched, so the profile picker can offer
+     *               its Manage button; null leaves that button off
+     */
+    public static Choice show(DialogViewModel model, Config config) {
         AtomicReference<Choice> result = new AtomicReference<>(
                 new Choice.Launch(model.selectedProfile(), model.rememberProfile()));
 
         try {
-            SwingUtilities.invokeAndWait(() -> result.set(build(model)));
+            SwingUtilities.invokeAndWait(() -> result.set(build(model, config)));
         } catch (Exception e) {
             // A UI problem is never a reason to stop the game from starting; the
             // preselected profile is applied instead.
@@ -62,7 +71,7 @@ public final class ProfileDialog {
         return result.get();
     }
 
-    private static Choice build(DialogViewModel model) {
+    private static Choice build(DialogViewModel model, Config config) {
         Theme.apply();
 
         JDialog dialog = new JDialog((java.awt.Frame) null, "Choose a mod profile", true);
@@ -80,7 +89,7 @@ public final class ProfileDialog {
         subtitle.setBorder(BorderFactory.createEmptyBorder(4, 0, 12, 0));
         subtitle.setAlignmentX(Component.LEFT_ALIGNMENT);
 
-        JPanel picker = ProfilePicker.build(model);
+        JPanel picker = ProfilePicker.build(model, config);
         picker.setAlignmentX(Component.LEFT_ALIGNMENT);
 
         JPanel body = new JPanel();

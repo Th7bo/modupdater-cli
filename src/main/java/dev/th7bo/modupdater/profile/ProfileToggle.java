@@ -142,7 +142,7 @@ public final class ProfileToggle {
     static void writeStarterConfig(Path file, ModInventory inventory) throws IOException {
         Map<String, Object> profiles = new LinkedHashMap<>();
         profiles.put("general", Map.of(
-                "description", "Everything you have now — split this up as you go",
+                "description", "Everything you have now",
                 "include", List.of("base")));
         profiles.put("everything", Map.of(
                 "description", "Every installed mod",

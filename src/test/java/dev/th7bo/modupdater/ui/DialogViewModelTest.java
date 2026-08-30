@@ -10,6 +10,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class DialogViewModelTest {
@@ -148,5 +149,79 @@ class DialogViewModelTest {
         assertEquals("512 B", UpdateRow.humanSize(512));
         assertEquals("1.0 KB", UpdateRow.humanSize(1024));
         assertEquals("1.0 MB", UpdateRow.humanSize(1024 * 1024));
+    }
+
+    // ── The profile picker ──────────────────────────────────────────────────
+
+    private static java.util.List<ProfileOption> options(String... names) {
+        java.util.List<ProfileOption> options = new java.util.ArrayList<>();
+        for (String name : names) {
+            options.add(ProfileOption.of(name, ""));
+        }
+        return options;
+    }
+
+    @Test
+    void offersNoProfilesUntilItIsAskedTo() {
+        // The instance that never enabled the feature must see no profile UI at all.
+        DialogViewModel model = new DialogViewModel(java.util.List.of());
+
+        assertFalse(model.profilesOffered());
+        assertNull(model.selectedProfile());
+    }
+
+    @Test
+    void preselectsTheProfileItIsGiven() {
+        DialogViewModel model = new DialogViewModel(java.util.List.of());
+
+        model.offerProfiles(options("general", "dungeons", "mining"), "dungeons", true);
+
+        assertTrue(model.profilesOffered());
+        assertEquals("dungeons", model.selectedProfile());
+        assertTrue(model.rememberProfile());
+    }
+
+    @Test
+    void keepsTheSelectionWhenTheEditorLeavesItAlone() {
+        // What the Manage button does on the way back: re-offer from disk.
+        DialogViewModel model = new DialogViewModel(java.util.List.of());
+        model.offerProfiles(options("general", "dungeons"), "dungeons", true);
+
+        model.offerProfiles(options("general", "dungeons", "mining"), model.selectedProfile(), true);
+
+        assertEquals("dungeons", model.selectedProfile());
+    }
+
+    @Test
+    void fallsBackToTheFirstWhenTheSelectedProfileWasRenamedAway() {
+        // Renaming or deleting the selected profile in the editor must not leave
+        // the dropdown pointing at something that no longer exists.
+        DialogViewModel model = new DialogViewModel(java.util.List.of());
+        model.offerProfiles(options("general", "dungeons"), "dungeons", true);
+
+        model.offerProfiles(options("general", "raiding"), model.selectedProfile(), true);
+
+        assertEquals("general", model.selectedProfile());
+    }
+
+    @Test
+    void copesWithTheEditorLeavingNoProfilesAtAll() {
+        DialogViewModel model = new DialogViewModel(java.util.List.of());
+        model.offerProfiles(options("general"), "general", true);
+
+        model.offerProfiles(options(), "general", true);
+
+        assertFalse(model.profilesOffered());
+        assertNull(model.selectedProfile());
+    }
+
+    @Test
+    void ignoresASelectionThatIsNotOnOffer() {
+        DialogViewModel model = new DialogViewModel(java.util.List.of());
+        model.offerProfiles(options("general", "dungeons"), "general", false);
+
+        model.selectProfile("nonexistent");
+
+        assertEquals("general", model.selectedProfile());
     }
 }

@@ -339,7 +339,7 @@ public final class Main {
         } else if (!candidates.isEmpty()) {
             announceDialog();
 
-            UpdateDialog.Choice choice = UpdateDialog.show(model);
+            UpdateDialog.Choice choice = UpdateDialog.show(model, config);
             if (prompting) {
                 selected = model.selectedProfile();
                 remember = model.rememberProfile();
@@ -357,7 +357,7 @@ public final class Main {
             Log.info("waiting for your answer in the \"Choose a mod profile\" window"
                     + " (check your other workspaces if you can't see it)");
 
-            ProfileDialog.Choice choice = ProfileDialog.show(model);
+            ProfileDialog.Choice choice = ProfileDialog.show(model, config);
             if (choice instanceof ProfileDialog.Choice.Abort) {
                 Log.info("launch cancelled by the user");
                 return ABORT_LAUNCH;
