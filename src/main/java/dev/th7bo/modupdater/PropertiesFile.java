@@ -20,7 +20,7 @@ import java.util.List;
  * both from Notepad and PowerShell 5.1, and rewriting the file should not be
  * what changes them.
  */
-final class PropertiesFile {
+public final class PropertiesFile {
 
     private static final char BOM = '﻿';
 
@@ -34,7 +34,7 @@ final class PropertiesFile {
      *
      * @return true when the file now says what was asked for
      */
-    static boolean set(Path file, String key, String value) throws IOException {
+    public static boolean set(Path file, String key, String value) throws IOException {
         String existing = Files.isRegularFile(file)
                 ? Files.readString(file, StandardCharsets.UTF_8)
                 : "";

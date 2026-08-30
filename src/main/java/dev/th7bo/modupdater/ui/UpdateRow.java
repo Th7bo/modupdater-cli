@@ -2,10 +2,16 @@ package dev.th7bo.modupdater.ui;
 
 import dev.th7bo.modupdater.diff.UpdateCandidate;
 
+import javax.swing.Icon;
 import java.util.ArrayList;
 import java.util.List;
 
-/** One line in the update dialog. */
+/**
+ * One line in the update dialog.
+ *
+ * @param icon the mod's own artwork, read from the installed JAR — never null, so
+ *             a mod without one still lines up with the rest
+ */
 public record UpdateRow(
         String name,
         String source,
@@ -14,8 +20,13 @@ public record UpdateRow(
         String mcVersion,
         String size,
         String change,
+        Icon icon,
         UpdateCandidate candidate) {
 
+    /**
+     * Built off the event thread, on purpose: this opens every candidate's JAR to
+     * find its icon, and doing that while the table paints would stutter.
+     */
     public static List<UpdateRow> from(List<UpdateCandidate> candidates) {
         List<UpdateRow> rows = new ArrayList<>();
         for (UpdateCandidate candidate : candidates) {
@@ -27,6 +38,7 @@ public record UpdateRow(
                     String.join(", ", candidate.version().mcVersions()),
                     humanSize(candidate.version().size()),
                     changeLabel(candidate),
+                    ModIcon.of(candidate.installed().path()),
                     candidate));
         }
         return List.copyOf(rows);

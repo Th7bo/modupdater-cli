@@ -117,7 +117,7 @@ Modrinth App has [no command to launch a profile](https://github.com/modrinth/co
 1. Rolls back the previous update if the session after it failed
 2. Fetches the manifest and scans `mods/`
 3. Offers only mods that are installed, built for this exact Minecraft version, and whose SHA-256 differs from what you have
-4. Shows the list with the commit message behind each build
+4. Shows the list — each mod's own icon, versions, and the commit message behind the build
 5. Downloads, **verifies the checksum before touching `mods/`**, then swaps the files
 6. If [mod profiles](#mod-profiles) are switched on for the instance, applies the chosen one
 
@@ -148,6 +148,25 @@ modupdater profile enable
 That sets `profiles.enabled=true` in the instance's `modupdater.properties` — leaving your comments and everything else in it alone — and writes a starter `mods/.modupdater/profiles.json` with every mod you have in one group. Nothing moves until you split that group up, so enabling it cannot change which mods load.
 
 `modupdater profile disable` reverses it, and brings any stored mods back into `mods/` first so nothing is left behind. Your `profiles.json` is kept either way.
+
+### Sorting your mods
+
+```bash
+modupdater profile edit
+```
+
+opens a window: groups and profiles down the left, and whatever you pick on the right. Selecting a group gives you every installed mod with a tick box and its own icon, which is the quickest way through the first pass over thirty-odd mods. Selecting a profile shows the groups it is built from and, as you tick them, what the profile actually comes to — how many mods end up on, and exactly which ones do not. There is an instance picker at the top and the on/off switch beside it, so one window covers every instance you have.
+
+Nothing is written until you press Save.
+
+If you would rather stay at the prompt, the same edits are two commands:
+
+```bash
+modupdater profile group add mining coleweight skyblockcollectiontracker
+modupdater profile group remove base bettermap
+```
+
+`group add` creates the group if it is new, and naming a mod you have not installed yet is fine — it is noted and does nothing until you install it.
 
 The rest of the settings live in `modupdater.properties`:
 
@@ -216,11 +235,14 @@ One JAR per mod. Switching profiles moves files between `mods/` and `mods/.modup
 ### Commands
 
 ```bash
-modupdater profile enable      # turn it on for this instance, with a starter config
-modupdater profile list        # groups, profiles, and what is applied now
+modupdater profile enable                 # turn it on, with a starter config
+modupdater profile edit                   # the manager window
+modupdater profile list                   # groups, profiles, and what is applied now
 modupdater profile current
-modupdater profile use mining  # switch without launching
-modupdater profile disable     # turn it off, putting every stored mod back
+modupdater profile use mining             # switch without launching
+modupdater profile group add mining coleweight
+modupdater profile group remove base bettermap
+modupdater profile disable                # turn it off, putting every stored mod back
 ```
 
 Same executable, same launcher hooks — `check` before launch, `apply` after exit, exactly as before. There is no second tool and no extra hook to add.
@@ -230,6 +252,7 @@ Same executable, same launcher hooks — `check` before launch, `apply` after ex
 - **Dependencies are not resolved.** If a mod needs a library, keep the library in a group every profile includes — `base` is what it is for. Nothing warns you about a missing dependency, because the manifest does not describe them.
 - A profile name that no longer exists, an unknown mod id, an unreadable `profiles.json` — each is logged and launches with everything active. Never a blocked launch.
 - A mod whose JAR turns up in both `mods/` and `inactive/` is left alone by profiles and reported, since which copy is real is not ours to guess. Delete the one you do not want.
+- `profile edit` and `profile group` rewrite `profiles.json`, so it comes back pretty-printed. JSON has no comments to lose, but your own indentation is not preserved.
 - Turn it off with `modupdater profile disable` rather than by editing the property: that puts every stored mod back into `mods/` first. Setting `profiles.enabled=false` by hand leaves them where they are, and the game will not load them.
 
 ## Exit codes

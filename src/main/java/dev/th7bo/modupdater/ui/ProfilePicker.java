@@ -33,8 +33,7 @@ final class ProfilePicker {
         combo.setAlignmentX(Component.LEFT_ALIGNMENT);
         combo.setMaximumSize(new Dimension(340, 30));
         combo.setPreferredSize(new Dimension(340, 30));
-        combo.setBackground(Theme.SURFACE);
-        combo.setForeground(Theme.TEXT);
+        Theme.styleComboBox(combo);
 
         model.profiles().stream()
                 .filter(option -> option.name().equals(model.selectedProfile()))

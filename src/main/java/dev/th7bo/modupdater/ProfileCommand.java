@@ -1,28 +1,22 @@
 package dev.th7bo.modupdater;
 
-import com.google.gson.GsonBuilder;
 import dev.th7bo.modupdater.instance.InstanceScanner;
 import dev.th7bo.modupdater.instance.ModInventory;
-import dev.th7bo.modupdater.instance.ModPaths;
 import dev.th7bo.modupdater.profile.Profile;
 import dev.th7bo.modupdater.profile.ProfileConfig;
-import dev.th7bo.modupdater.profile.ProfileManager;
-import dev.th7bo.modupdater.profile.ProfilePlan;
-import dev.th7bo.modupdater.profile.ProfileResolver;
+import dev.th7bo.modupdater.profile.ProfileConfigFile;
 import dev.th7bo.modupdater.profile.ProfileSession;
 import dev.th7bo.modupdater.profile.ProfileState;
+import dev.th7bo.modupdater.profile.ProfileToggle;
+import dev.th7bo.modupdater.ui.ManagerWindow;
 import dev.th7bo.modupdater.util.Log;
 
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.LinkedHashMap;
+import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
 /**
- * {@code modupdater profile [list|current|use <name>|enable|disable]}.
+ * {@code modupdater profile [list|current|use|group|edit|enable|disable]}.
  *
  * <p>On the same executable as {@code check} and {@code apply} deliberately: one
  * thing owns the mods folder, so there is one place a mod can be moved from.
@@ -32,8 +26,17 @@ import java.util.Map;
  */
 final class ProfileCommand {
 
-    private static final String USAGE =
-            "Usage: modupdater profile [list | current | use <name> | enable | disable]";
+    private static final String USAGE = """
+            Usage: modupdater profile [command]
+
+              list                          groups, profiles, and what is applied now
+              current                       the profile on disk
+              use <name>                    switch to a profile
+              edit                          open the manager window
+              group add <group> <mod>...    put mods in a group, creating it if needed
+              group remove <group> <mod>... take mods out of a group
+              enable                        turn profiles on for this instance
+              disable                       turn them off, putting every stored mod back""";
 
     private ProfileCommand() {
     }
@@ -49,13 +52,22 @@ final class ProfileCommand {
         if ("disable".equals(subcommand)) {
             return disable(config);
         }
+        // The window has the on/off switch in it, so it opens either way.
+        if ("edit".equals(subcommand)) {
+            ManagerWindow.open(config);
+            return 0;
+        }
 
         if (!config.profilesEnabled()) {
             System.out.println("Profiles are switched off for this instance.");
             System.out.println();
             System.out.println("    modupdater profile enable");
             System.out.println();
-            System.out.println("turns them on and writes a starter config you can edit.");
+            System.out.println("turns them on and writes a starter config, or");
+            System.out.println();
+            System.out.println("    modupdater profile edit");
+            System.out.println();
+            System.out.println("opens a window to sort your mods into groups.");
             return 0;
         }
 
@@ -65,6 +77,7 @@ final class ProfileCommand {
             case "list" -> list(session);
             case "current" -> current(session);
             case "use" -> use(config, session, args);
+            case "group" -> group(session, args);
             default -> {
                 System.out.println(USAGE);
                 yield 0;
@@ -72,131 +85,56 @@ final class ProfileCommand {
         };
     }
 
-    /**
-     * Switches the feature on for this instance: sets the property, and writes a
-     * starter {@code profiles.json} listing what is installed so there is
-     * something real to edit rather than a blank file.
-     */
+    /** Both toggles report the same outcomes; only the wording is this class's business. */
     private static int enable(Config config) {
-        Path properties = config.propertiesFile();
-        if (properties == null) {
-            System.out.println("Could not work out where modupdater.properties belongs from "
-                    + config.modsDir());
-            return 0;
-        }
-
-        ModPaths paths = ModPaths.of(config.modsDir());
-        Path profilesFile = ProfileConfig.fileIn(paths.stateDir());
-        boolean alreadyOn = config.profilesEnabled();
-
-        if (!alreadyOn) {
-            try {
-                PropertiesFile.set(properties, "profiles.enabled", "true");
-            } catch (IOException e) {
-                System.out.println("Could not write " + properties + ": " + e.getMessage());
-                System.out.println("Add this line to it by hand:  profiles.enabled=true");
-                return 0;
+        switch (ProfileToggle.enable(config)) {
+            case ProfileToggle.Result.Failed failed -> {
+                System.out.println(capitalise(failed.detail()));
+                System.out.println("Add this line to modupdater.properties by hand:  profiles.enabled=true");
             }
-            System.out.println("Profiles enabled for this instance (" + properties + ").");
-        } else {
-            System.out.println("Profiles are already enabled for this instance.");
+            case ProfileToggle.Result.AlreadyEnabled already -> {
+                System.out.println("Profiles are already enabled for this instance.");
+                System.out.println("Your profiles are in " + already.profilesFile() + ".");
+            }
+            case ProfileToggle.Result.Enabled enabled -> {
+                System.out.println("Profiles enabled for this instance (" + enabled.properties() + ").");
+                if (enabled.starterConfig() != null) {
+                    System.out.println();
+                    System.out.println("Wrote a starter config to " + enabled.starterConfig() + ".");
+                    System.out.println("Every installed mod is in one group called \"base\", so nothing"
+                            + " moves until you split it up.");
+                    System.out.println("Edit it by hand, with 'modupdater profile group add', or in"
+                            + " 'modupdater profile edit'.");
+                } else {
+                    System.out.println("Your profiles are in " + enabled.profilesFile() + ".");
+                }
+            }
+            default -> System.out.println("Nothing to do.");
         }
-
-        // Never overwritten. Somebody's groups are not ours to replace, and this
-        // command is the one they would run again after forgetting they had.
-        if (Files.isRegularFile(profilesFile)) {
-            System.out.println("Your profiles are in " + profilesFile + ".");
-            return 0;
-        }
-
-        ModInventory inventory = ModInventory.scan(paths, new InstanceScanner());
-        try {
-            writeStarterConfig(profilesFile, inventory);
-        } catch (IOException e) {
-            System.out.println("Could not write " + profilesFile + ": " + e.getMessage());
-            return 0;
-        }
-
-        System.out.println();
-        System.out.println("Wrote a starter config to " + profilesFile + ".");
-        System.out.println("Every installed mod is in one group called \"base\", so nothing moves"
-                + " until you split it up.");
-        System.out.println("Edit it, then: modupdater profile list");
         return 0;
     }
 
-    /**
-     * Switches the feature off — after bringing every stored mod back into
-     * {@code mods/}.
-     *
-     * <p>Order matters. Disabling first would strand whatever the current profile
-     * had switched off: the game would not load it and nothing would move it back,
-     * because an instance with profiles off is one this program does not rearrange.
-     */
     private static int disable(Config config) {
-        Path properties = config.propertiesFile();
-        if (properties == null) {
-            System.out.println("Could not work out where modupdater.properties belongs from "
-                    + config.modsDir());
-            return 0;
-        }
-
-        if (!config.profilesEnabled()) {
-            System.out.println("Profiles are already switched off for this instance.");
-            return 0;
-        }
-
-        ModPaths paths = ModPaths.of(config.modsDir());
-        ModInventory inventory = ModInventory.scan(paths, new InstanceScanner());
-
-        if (!inventory.inactive().isEmpty()) {
-            ProfilePlan plan = ProfilePlan.of(paths, inventory, ProfileResolver.everything(inventory));
-            ProfileManager.Result result = new ProfileManager(paths).apply(plan);
-
-            if (result instanceof ProfileManager.Result.Failed failed) {
-                // Leave the feature on: it is the only thing that can tidy this up.
-                System.out.println("Could not bring every mod back into mods/: " + failed.detail());
-                System.out.println("Profiles are still enabled. Fix that, then try again.");
-                return 0;
+        switch (ProfileToggle.disable(config)) {
+            case ProfileToggle.Result.Failed failed -> System.out.println(capitalise(failed.detail()));
+            case ProfileToggle.Result.AlreadyDisabled ignored ->
+                    System.out.println("Profiles are already switched off for this instance.");
+            case ProfileToggle.Result.Disabled disabled -> {
+                if (disabled.restored() > 0) {
+                    System.out.println("Brought " + disabled.restored()
+                            + " stored mod(s) back into mods/.");
+                }
+                System.out.println("Profiles disabled. This instance now behaves as it did before.");
+                System.out.println("Your profiles are still in " + disabled.profilesFile()
+                        + " if you want them back.");
             }
-            System.out.println("Brought " + plan.activate().size() + " stored mod(s) back into mods/.");
+            default -> System.out.println("Nothing to do.");
         }
-
-        try {
-            PropertiesFile.set(properties, "profiles.enabled", "false");
-        } catch (IOException e) {
-            System.out.println("Could not write " + properties + ": " + e.getMessage());
-            return 0;
-        }
-
-        System.out.println("Profiles disabled. This instance now behaves as it did before.");
-        System.out.println("Your profiles are still in " + ProfileConfig.fileIn(paths.stateDir())
-                + " if you want them back.");
         return 0;
     }
 
-    /**
-     * One group holding everything installed, and two profiles that both amount to
-     * "all of it". Deliberately a no-op set: enabling the feature must not change
-     * which mods load, only make it possible to.
-     */
-    private static void writeStarterConfig(Path file, ModInventory inventory) throws IOException {
-        Map<String, Object> profiles = new LinkedHashMap<>();
-        profiles.put("general", Map.of(
-                "description", "Everything you have now — split this up as you go",
-                "include", List.of("base")));
-        profiles.put("everything", Map.of(
-                "description", "Every installed mod",
-                "includeAll", true));
-
-        Map<String, Object> document = new LinkedHashMap<>();
-        document.put("groups", Map.of("base", List.copyOf(inventory.modIds())));
-        document.put("profiles", profiles);
-
-        Files.createDirectories(file.getParent());
-        Files.writeString(file,
-                new GsonBuilder().setPrettyPrinting().create().toJson(document) + System.lineSeparator(),
-                StandardCharsets.UTF_8);
+    private static String capitalise(String message) {
+        return message.isEmpty() ? message : Character.toUpperCase(message.charAt(0)) + message.substring(1);
     }
 
     private static int list(ProfileSession session) {
@@ -288,6 +226,72 @@ final class ProfileCommand {
         return 0;
     }
 
+    /**
+     * {@code profile group add|remove <group> <mod>...} — the maintenance that
+     * would otherwise mean opening the config to change one line.
+     */
+    private static int group(ProfileSession session, String[] args) {
+        String action = positional(args, 2);
+        String name = positional(args, 3);
+        List<String> modIds = positionalsFrom(args, 4);
+
+        boolean adding = "add".equals(action);
+        boolean removing = "remove".equals(action) || "rm".equals(action);
+
+        if ((!adding && !removing) || name == null || modIds.isEmpty()) {
+            System.out.println(USAGE);
+            return 0;
+        }
+
+        Path stateDir = session.paths().stateDir();
+        ProfileConfigFile.Result result = adding
+                ? ProfileConfigFile.addToGroup(stateDir, name, modIds)
+                : ProfileConfigFile.removeFromGroup(stateDir, name, modIds);
+
+        switch (result) {
+            case ProfileConfigFile.Result.Failed failed ->
+                    System.out.println("Could not edit " + ProfileConfig.FILE + ": " + failed.detail());
+            case ProfileConfigFile.Result.Unchanged unchanged -> System.out.println(
+                    "'" + unchanged.group() + "' already " + (adding ? "has" : "lacks")
+                            + " all of those. It holds: " + describeMembers(unchanged.members()));
+            case ProfileConfigFile.Result.Changed changed -> {
+                System.out.println((adding ? "Added to " : "Removed from ") + "'" + changed.group()
+                        + "': " + String.join(", ", changed.affected()));
+                System.out.println("'" + changed.group() + "' now holds: "
+                        + describeMembers(changed.members()));
+                warnAboutStrangers(session, changed.affected(), adding);
+            }
+        }
+
+        return 0;
+    }
+
+    private static String describeMembers(List<String> members) {
+        return members.isEmpty() ? "nothing" : String.join(", ", members);
+    }
+
+    /**
+     * A group may name a mod that is not installed — the user could be about to
+     * install it — so this warns rather than refusing. Nothing here has moved a
+     * file, and the resolver already skips ids it cannot find.
+     */
+    private static void warnAboutStrangers(ProfileSession session, List<String> modIds, boolean adding) {
+        if (!adding) {
+            return;
+        }
+
+        var installed = ModInventory.scan(session.paths(), new InstanceScanner()).modIds().stream()
+                .map(ProfileConfig::normalise)
+                .toList();
+
+        List<String> unknown = modIds.stream().filter(id -> !installed.contains(id)).toList();
+        if (!unknown.isEmpty()) {
+            System.out.println();
+            System.out.println("Note: not installed right now — " + String.join(", ", unknown));
+            System.out.println("That is fine, they just do nothing until they are.");
+        }
+    }
+
     /** The word after {@code profile}, ignoring flags. Defaults to listing. */
     private static String subcommand(String[] args) {
         String value = positional(args, 1);
@@ -296,6 +300,18 @@ final class ProfileCommand {
 
     private static String argument(String[] args) {
         return positional(args, 2);
+    }
+
+    /** Every positional from {@code index} onwards — the mod ids of a group edit. */
+    private static List<String> positionalsFrom(String[] args, int index) {
+        List<String> values = new ArrayList<>();
+        for (int i = index; ; i++) {
+            String value = positional(args, i);
+            if (value == null) {
+                return values;
+            }
+            values.add(value);
+        }
     }
 
     private static String positional(String[] args, int index) {

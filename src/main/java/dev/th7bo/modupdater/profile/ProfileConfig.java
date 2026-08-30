@@ -70,6 +70,12 @@ public final class ProfileConfig {
         return stateDir.resolve(FILE);
     }
 
+    /** The same mapping the file gets, for a tree already in memory. */
+    static ProfileConfig fromJson(com.google.gson.JsonObject document) {
+        Document mapped = new Gson().fromJson(document, Document.class);
+        return mapped == null ? empty() : of(mapped.profiles, mapped.groups);
+    }
+
     /** @return the profiles on disk, or an empty config when there are none to read */
     public static ProfileConfig read(Path stateDir) {
         Path file = fileIn(stateDir);
