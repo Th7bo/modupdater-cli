@@ -2,6 +2,11 @@
 build/
 *.class
 
+# The installer zip is a build output. Everyone gets it from the release asset —
+# the bootstrap scripts fetch /releases/latest/download/modupdater-installer.zip —
+# so a copy in here is only ever a stale 4 MB blob in the history.
+modupdater-installer.zip
+
 # Local editor state
 .idea/
 *.iml
