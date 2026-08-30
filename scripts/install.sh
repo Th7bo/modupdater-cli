@@ -15,6 +15,7 @@ set -u
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 JAR="${MODUPDATER_JAR:-$HERE/modupdater-cli.jar}"
 INSTALL_DIR="${MODUPDATER_HOME:-$HOME/.local/share/modupdater}"
+BIN_DIR="${MODUPDATER_BIN_DIR:-$HOME/.local/bin}"
 
 bold()  { printf '\033[1m%s\033[0m\n' "$1"; }
 warn()  { printf '\033[33m%s\033[0m\n' "$1"; }
@@ -189,6 +190,47 @@ chmod 600 "$SAVED_TOKEN_FILE"
 
 ok "Installed the updater into $INSTALL_DIR"
 
+# ── Put "modupdater" on PATH ────────────────────────────────────────────────
+
+# A one-line launcher rather than a symlink: the wrapper finds the JAR beside
+# itself, and a symlink would put it in $BIN_DIR where there is no JAR.
+mkdir -p "$BIN_DIR"
+printf '#!/usr/bin/env bash\nexec "%s" "$@"\n' "$INSTALL_DIR/modupdater.sh" > "$BIN_DIR/modupdater"
+chmod +x "$BIN_DIR/modupdater"
+
+case ":$PATH:" in
+    *":$BIN_DIR:"*) on_path=1 ;;
+    *) on_path=0 ;;
+esac
+
+if [ "$on_path" -eq 1 ]; then
+    ok "You can now run: modupdater profile enable"
+else
+    # Appended to whichever startup files exist rather than one guessed shell,
+    # and marked so running the installer again does not stack up copies.
+    path_line="export PATH=\"$BIN_DIR:\$PATH\"  # modupdater"
+    added=""
+
+    for rc in "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.profile"; do
+        [ -f "$rc" ] || continue
+        if grep -q '# modupdater$' "$rc"; then
+            added="$added $rc"
+            continue
+        fi
+        printf '\n%s\n' "$path_line" >> "$rc"
+        added="$added $rc"
+    done
+
+    if [ -z "$added" ]; then
+        printf '\n%s\n' "$path_line" >> "$HOME/.profile"
+        added=" $HOME/.profile"
+    fi
+
+    ok "Added $BIN_DIR to your PATH (in:$added)"
+    warn "Open a new terminal before running 'modupdater', or run this once:"
+    echo "  export PATH=\"$BIN_DIR:\$PATH\""
+fi
+
 PRE_HOOK="$INSTALL_DIR/check.sh"
 POST_HOOK="$INSTALL_DIR/apply.sh"
 
@@ -319,3 +361,4 @@ if [ "$manual_needed" -eq 1 ]; then
     echo "Some instances still need the hooks pasted in by hand — see above."
 fi
 echo "Next time you launch, you'll be asked about any available updates."
+echo "To sort your mods into profiles:  modupdater profile enable"

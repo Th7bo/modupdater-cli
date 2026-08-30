@@ -58,6 +58,26 @@ function Invoke-Cli ($cliArgs, $jvmArgs = @()) {
     }
 }
 
+# Puts the install directory on the user's PATH, so "modupdater" works from any
+# prompt. Only the user-scoped variable is touched - the machine one needs
+# administrator rights, and rewriting it is how a PATH gets destroyed.
+#
+# Read back the User value alone rather than $env:Path: that is the User and
+# Machine values already joined together, and writing it back would copy every
+# machine entry into the user's own PATH.
+function Add-ToUserPath ($dir) {
+    $current = [Environment]::GetEnvironmentVariable('Path', 'User')
+    $parts = @()
+    if ($current) { $parts = @($current -split ';' | Where-Object { $_ -ne '' }) }
+
+    if ($parts -contains $dir) { return $false }
+
+    [Environment]::SetEnvironmentVariable('Path', (($parts + $dir) -join ';'), 'User')
+    # So the rest of this session, and anything it starts, can already see it.
+    $env:Path = "$env:Path;$dir"
+    return $true
+}
+
 function Protect-TokenFile ($path) {
     try {
         $acl = Get-Acl -LiteralPath $path
@@ -235,6 +255,22 @@ Protect-TokenFile $savedTokenFile
 
 Write-Ok "Installed the updater into $installDir"
 
+# ── Put "modupdater" on PATH ────────────────────────────────────────────────
+
+# modupdater.bat is already in $installDir, and .BAT is in PATHEXT, so putting
+# the folder on PATH is all "modupdater" needs to work as a command.
+try {
+    if (Add-ToUserPath $installDir) {
+        Write-Ok "Added $installDir to your PATH"
+        Write-Warn '  Open a new terminal before running "modupdater" - this one predates the change.'
+    } else {
+        Write-Ok 'You can now run: modupdater profile enable'
+    }
+} catch {
+    Write-Warn "  Could not add $installDir to your PATH: $($_.Exception.Message)"
+    Write-Host  "  Run it by full path instead: $(Join-Path $installDir 'modupdater.bat') profile enable"
+}
+
 $preHook = Join-Path $installDir 'check.bat'
 $postHook = Join-Path $installDir 'apply.bat'
 
@@ -352,5 +388,6 @@ if ($manualNeeded) {
     Write-Host 'Some instances still need the hooks pasted in by hand - see above.'
 }
 Write-Host "Next time you launch, you'll be asked about any available updates."
+Write-Host 'To sort your mods into profiles:  modupdater profile enable'
 Write-Host ''
 Read-Host 'Press Enter to close'
