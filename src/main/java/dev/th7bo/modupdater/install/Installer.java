@@ -1,6 +1,7 @@
 package dev.th7bo.modupdater.install;
 
 import dev.th7bo.modupdater.diff.UpdateCandidate;
+import dev.th7bo.modupdater.instance.ModPaths;
 import dev.th7bo.modupdater.util.Hashing;
 import dev.th7bo.modupdater.util.Log;
 
@@ -25,12 +26,8 @@ import java.util.Map;
  */
 public final class Installer {
 
-    public static final String STATE_DIR = ".modupdater";
-
     /** Written by the in-game mod once the client has actually loaded. */
     public static final String LAUNCH_MARKER = "launch-ok";
-    private static final String STAGING_DIR = "staging";
-    private static final String BACKUP_DIR = "backup";
 
     private final Downloader downloader;
 
@@ -52,7 +49,16 @@ public final class Installer {
     }
 
     public static Path stateDir(Path modsDir) {
-        return modsDir.resolve(STATE_DIR);
+        return ModPaths.of(modsDir).stateDir();
+    }
+
+    /**
+     * Where a replacement JAR goes: alongside the one it replaces, falling back to
+     * {@code mods/} for a path with no parent.
+     */
+    private static Path destinationFor(Path replaced, Path modsDir) {
+        Path parent = replaced.toAbsolutePath().normalize().getParent();
+        return parent == null ? modsDir : parent;
     }
 
     /** Installs what the pre-launch dialog chose. */
@@ -73,9 +79,10 @@ public final class Installer {
             return new Outcome(installed, failures);
         }
 
-        Path state = stateDir(modsDir);
-        Path staging = state.resolve(STAGING_DIR);
-        Path backup = state.resolve(BACKUP_DIR);
+        ModPaths paths = ModPaths.of(modsDir);
+        Path state = paths.stateDir();
+        Path staging = paths.stagingDir();
+        Path backup = paths.backupDir();
 
         try {
             // Exactly one backup generation is kept. Older ones are worthless once
@@ -86,7 +93,7 @@ public final class Installer {
             Files.createDirectories(staging);
             Files.createDirectories(backup);
         } catch (IOException e) {
-            Log.error("could not prepare " + STATE_DIR + ": " + e.getMessage());
+            Log.error("could not prepare " + ModPaths.STATE + ": " + e.getMessage());
             return new Outcome(installed, Map.of("*", String.valueOf(e.getMessage())));
         }
 
@@ -109,7 +116,11 @@ public final class Installer {
                 Path backedUp = backup.resolve(replaced.getFileName().toString());
                 Files.move(replaced, backedUp, StandardCopyOption.REPLACE_EXISTING);
 
-                Path target = modsDir.resolve(filename);
+                // Next to the JAR being replaced, not always in mods/. A mod the
+                // current profile leaves out is still installed and still gets
+                // updates, and its new build belongs in the same storage the old
+                // one was in — otherwise updating a mod would switch it on.
+                Path target = destinationFor(replaced, modsDir).resolve(filename);
                 try {
                     Files.move(staged, target, StandardCopyOption.REPLACE_EXISTING);
                 } catch (IOException e) {

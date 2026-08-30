@@ -119,6 +119,7 @@ Modrinth App has [no command to launch a profile](https://github.com/modrinth/co
 3. Offers only mods that are installed, built for this exact Minecraft version, and whose SHA-256 differs from what you have
 4. Shows the list with the commit message behind each build
 5. Downloads, **verifies the checksum before touching `mods/`**, then swaps the files
+6. If [mod profiles](#mod-profiles) are switched on for the instance, applies the chosen one
 
 `apply` (post-exit)
 
@@ -129,6 +130,97 @@ Modrinth App has [no command to launch a profile](https://github.com/modrinth/co
 ### Rollback
 
 The platform builds from upstream development commits, so a JAR that crashes on init is an ordinary outcome. Replaced JARs are kept in `mods/.modupdater/backup/` until a launch proves the new ones work. Exactly one generation is kept.
+
+## Mod profiles
+
+**Off by default.** If you have never asked for this, nothing about it applies to you: no extra prompt, no mods moved, no files created, no `profiles.json` needed. Skip this section.
+
+It exists for the case where one instance holds every SkyBlock mod you own and a weaker machine cannot run all of them at once. Turn it on and you pick a set at launch — dungeon mods for dungeons, mining mods for mining, a small one when you want frames.
+
+It is per instance, so the same setup can have it on for a laptop and off for a desktop.
+
+### Turning it on
+
+In the instance's `modupdater.properties`:
+
+```properties
+profiles.enabled=true    # off unless this says otherwise
+profile.default=general  # used when nothing is remembered
+profile.prompt=true      # ask at launch, or just apply the default
+profile.remember=true    # start from what you picked last time
+```
+
+Then describe your mods in `mods/.modupdater/profiles.json`:
+
+```json
+{
+  "groups": {
+    "base":        ["fabric-api", "skyhanni", "modupdater"],
+    "performance": ["sodium", "lithium", "ferritecore"],
+    "qol":         ["firmament", "dulkirmod"],
+    "dungeons":    ["bettermap", "dungeonrooms"],
+    "mining":      ["coleweight", "skyblockcollectiontracker"]
+  },
+  "profiles": {
+    "general":  { "description": "Normal SkyBlock",  "include": ["base", "performance", "qol"] },
+    "dungeons": { "description": "Dungeon mods on",  "include": ["base", "performance", "qol", "dungeons"] },
+    "mining":   { "description": "Mining mods on",   "include": ["base", "performance", "mining"] },
+    "lite":     { "description": "Maximum FPS",      "include": ["base", "performance"], "ungrouped": "disable" },
+    "everything": { "description": "All of it",      "includeAll": true }
+  }
+}
+```
+
+A profile is a **composition of groups**, not a list of exceptions. `mining` is `base + performance + mining`. Install a new general-purpose mod, add it to `base` once, and every profile built on `base` picks it up — you never edit five profiles for one mod.
+
+For the one-offs that do not deserve a group:
+
+| Key | Meaning |
+|---|---|
+| `include` | group names to combine |
+| `add` | extra mod ids, on top of the groups |
+| `remove` | mod ids to drop, whatever the groups say |
+| `includeAll` | every installed mod, ignoring groups |
+| `ungrouped` | `keep` (default) or `disable` — see below |
+
+Mods are named by their **mod id** — the `id` in the JAR's `fabric.mod.json`, the same identifier the updater matches against the server. Not the filename, so a build that renames `BetterMap-1.6.2.jar` to `BetterMap-1.7.0.jar` changes nothing.
+
+A mod that appears in no group and in no profile's `add`/`remove` stays **active in every profile**, and is listed in the log. Installing a mod and forgetting to file it should not make it vanish from the game. Set `"ungrouped": "disable"` on a profile — usually the lean one — when you want the opposite.
+
+### How it is stored
+
+```
+mods/
+├── skyhanni-1.2.5.jar          ← active: what the game loads
+├── sodium-0.6.0.jar
+└── .modupdater/
+    ├── profiles.json           ← your groups and profiles
+    ├── profile.json            ← what is applied now, and what to offer next
+    ├── inactive/               ← installed, but not in the current profile
+    │   └── coleweight-2.0.jar
+    └── backup/                 ← the previous build, until a launch confirms
+```
+
+One JAR per mod. Switching profiles moves files between `mods/` and `mods/.modupdater/inactive/` — nothing is copied per profile, and nothing is ever deleted because a profile leaves it out.
+
+**A mod in `inactive/` is still installed, and still gets updates.** That is the point: switch to Dungeons after a month away and you get the current BetterMap, not the one from before. Its new build lands in `inactive/`, so updating a mod never switches it on.
+
+### Commands
+
+```bash
+modupdater profile list        # groups, profiles, and what is applied now
+modupdater profile current
+modupdater profile use mining  # switch without launching
+```
+
+Same executable, same launcher hooks — `check` before launch, `apply` after exit, exactly as before. There is no second tool and no extra hook to add.
+
+### Worth knowing
+
+- **Dependencies are not resolved.** If a mod needs a library, keep the library in a group every profile includes — `base` is what it is for. Nothing warns you about a missing dependency, because the manifest does not describe them.
+- A profile name that no longer exists, an unknown mod id, an unreadable `profiles.json` — each is logged and launches with everything active. Never a blocked launch.
+- A mod whose JAR turns up in both `mods/` and `inactive/` is left alone by profiles and reported, since which copy is real is not ours to guess. Delete the one you do not want.
+- Turning `profiles.enabled` back off leaves whatever is in `inactive/` where it is. Run `modupdater profile use everything` first if you want it all back.
 
 ## Exit codes
 
@@ -148,6 +240,10 @@ Resolution order: command-line flag, then `modupdater.properties`, then environm
 | `--token-file` | `token.file` | `MODUPDATER_TOKEN_FILE` | Token file (default `<mods>/.modupdater/token`) |
 | `--relaunch-command` | `relaunch.command` | `MODUPDATER_RELAUNCH_COMMAND` | Run after a successful session |
 | — | — | `MODUPDATER_TOKEN` | Token directly, instead of a file |
+| `--profiles-enabled` | `profiles.enabled` | `MODUPDATER_PROFILES_ENABLED` | Mod profiles for this instance (default off) |
+| `--profile` | `profile.default` | `MODUPDATER_PROFILE` | Profile to use when nothing is remembered |
+| `--profile-prompt` | `profile.prompt` | `MODUPDATER_PROFILE_PROMPT` | Ask at launch (default yes) |
+| `--profile-remember` | `profile.remember` | `MODUPDATER_PROFILE_REMEMBER` | Offer last launch's choice first (default yes) |
 
 Logs go to `mods/.modupdater/log.txt`. The token is redacted from every line.
 
@@ -171,5 +267,5 @@ Builds the zip and attaches it to the `v<version>` GitHub release, creating it i
 
 - Installing mods you don't already have — this updates, it doesn't install
 - Mods the platform doesn't build (Modrinth/CurseForge sources)
-- Dependency resolution between mods
+- Dependency resolution between mods, profiles included
 - Launchers without pre-launch/post-exit hooks

@@ -17,6 +17,10 @@ public final class DialogViewModel {
     private final List<UpdateRow> rows;
     private final Set<Integer> selected = new LinkedHashSet<>();
 
+    private List<ProfileOption> profiles = List.of();
+    private String selectedProfile;
+    private boolean rememberProfile;
+
     public DialogViewModel(List<UpdateCandidate> candidates) {
         this.rows = UpdateRow.from(candidates == null ? List.of() : candidates);
         // Everything is pre-selected: the user asked for updates by launching, so
@@ -74,6 +78,49 @@ public final class DialogViewModel {
             }
         }
         return List.copyOf(chosen);
+    }
+
+    /**
+     * Adds a profile picker to the dialog.
+     *
+     * <p>Not called at all unless the instance has profiles switched on, which is
+     * what keeps the prompt exactly as it was for everyone else: no dropdown, no
+     * extra row, no second window.
+     */
+    public void offerProfiles(List<ProfileOption> options, String preselected, boolean remember) {
+        this.profiles = options == null ? List.of() : List.copyOf(options);
+        this.rememberProfile = remember;
+        this.selectedProfile = this.profiles.stream()
+                .map(ProfileOption::name)
+                .filter(name -> name.equals(preselected))
+                .findFirst()
+                .orElseGet(() -> this.profiles.isEmpty() ? null : this.profiles.get(0).name());
+    }
+
+    public boolean profilesOffered() {
+        return !profiles.isEmpty();
+    }
+
+    public List<ProfileOption> profiles() {
+        return profiles;
+    }
+
+    public String selectedProfile() {
+        return selectedProfile;
+    }
+
+    public void selectProfile(String name) {
+        if (profiles.stream().anyMatch(option -> option.name().equals(name))) {
+            selectedProfile = name;
+        }
+    }
+
+    public boolean rememberProfile() {
+        return rememberProfile;
+    }
+
+    public void setRememberProfile(boolean remember) {
+        this.rememberProfile = remember;
     }
 
     /**

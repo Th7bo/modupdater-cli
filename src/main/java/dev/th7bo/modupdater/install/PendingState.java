@@ -82,4 +82,44 @@ public record PendingState(List<Entry> entries, boolean launchConfirmed, long in
     public PendingState confirmed() {
         return new PendingState(new ArrayList<>(entries), true, installedAtMillis);
     }
+
+    /**
+     * Follows JARs that a profile switch moved after they were installed.
+     *
+     * <p>An update installed this launch can be switched off by the profile
+     * applied moments later. Without this the rollback would look for the new JAR
+     * where it no longer is, and would put the old one back into {@code mods/} —
+     * turning a mod the profile excluded back on, by way of a failure.
+     *
+     * @param moved old path → new path, from the profile switch
+     * @return the same state with each affected entry pointing at the new location
+     */
+    public PendingState relocate(java.util.Map<Path, Path> moved) {
+        if (moved == null || moved.isEmpty() || entries.isEmpty()) {
+            return this;
+        }
+
+        List<Entry> updated = new ArrayList<>();
+        for (Entry entry : entries) {
+            Path destination = moved.get(Path.of(entry.newFile()));
+            if (destination == null) {
+                updated.add(entry);
+                continue;
+            }
+
+            // The replaced JAR has a different filename after a version bump, so it
+            // is rehomed by directory rather than by path.
+            Path replaced = Path.of(entry.replacedFile());
+            Path newParent = destination.getParent();
+            Path rehomed = newParent == null ? replaced : newParent.resolve(replaced.getFileName());
+
+            updated.add(new Entry(
+                    entry.modId(),
+                    destination.toString(),
+                    entry.backupFile(),
+                    rehomed.toString()));
+        }
+
+        return new PendingState(updated, launchConfirmed, installedAtMillis);
+    }
 }

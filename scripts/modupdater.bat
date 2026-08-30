@@ -10,8 +10,10 @@ REM   Post-exit:   C:\path\to\modupdater.bat apply
 
 setlocal
 
-set "COMMAND=%~1"
-if "%COMMAND%"=="" set "COMMAND=check"
+REM Everything is forwarded, so the same wrapper serves the launcher hooks and
+REM someone at a prompt running "modupdater.bat profile use dungeons".
+set "ARGS=%*"
+if "%ARGS%"=="" set "ARGS=check"
 
 set "HERE=%~dp0"
 if "%MODUPDATER_JAR%"=="" (
@@ -36,7 +38,7 @@ if not exist "%JAR%" (
     exit /b 0
 )
 
-"%JAVA%" -jar "%JAR%" %COMMAND% --mods-dir "%MODS_DIR%"
+"%JAVA%" -jar "%JAR%" %ARGS% --mods-dir "%MODS_DIR%"
 
 REM 1 means the user cancelled the launch. Every other failure must still let
 REM the game start.

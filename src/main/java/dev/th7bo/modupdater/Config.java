@@ -1,5 +1,7 @@
 package dev.th7bo.modupdater;
 
+import dev.th7bo.modupdater.instance.ModPaths;
+
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -14,13 +16,26 @@ import java.util.Properties;
  *
  * <p>The token is deliberately not a flag. Command lines are visible to every
  * process on the machine, so it is read from a file or the environment only.
+ *
+ * <p>The profile settings are per instance because that is where this file
+ * lives: a laptop can pick a mod set at every launch while the desktop, whose
+ * properties file says nothing about profiles, behaves exactly as it always has.
+ *
+ * @param profilesEnabled  off unless the instance asks for it — see {@code profiles.enabled}
+ * @param profileDefault   the profile to start from when nothing is remembered
+ * @param profilePrompt    whether to ask at launch, or just apply the default
+ * @param profileRemember  whether the last choice becomes the next default
  */
 public record Config(
         String baseUrl,
         Path modsDir,
         String mcVersion,
         Path tokenFile,
-        String relaunchCommand) {
+        String relaunchCommand,
+        boolean profilesEnabled,
+        String profileDefault,
+        boolean profilePrompt,
+        boolean profileRemember) {
 
     private static final String PROPERTIES_FILE = "modupdater.properties";
 
@@ -40,10 +55,22 @@ public record Config(
 
         String tokenPath = resolve(flags, file, "token-file", "token.file", "MODUPDATER_TOKEN_FILE", null);
         Path tokenFile = tokenPath == null
-                ? modsDir.resolve(".modupdater").resolve("token")
+                ? ModPaths.of(modsDir).stateDir().resolve("token")
                 : Path.of(tokenPath);
 
-        return new Config(baseUrl, modsDir, mcVersion, tokenFile, relaunch);
+        // Absent means off. Existing instances have no profile properties at all,
+        // and must go on behaving as though the feature does not exist.
+        boolean profilesEnabled = flag(flags, file, "profiles-enabled", "profiles.enabled",
+                "MODUPDATER_PROFILES_ENABLED", false);
+        String profileDefault = resolve(flags, file, "profile", "profile.default",
+                "MODUPDATER_PROFILE", null);
+        boolean profilePrompt = flag(flags, file, "profile-prompt", "profile.prompt",
+                "MODUPDATER_PROFILE_PROMPT", true);
+        boolean profileRemember = flag(flags, file, "profile-remember", "profile.remember",
+                "MODUPDATER_PROFILE_REMEMBER", true);
+
+        return new Config(baseUrl, modsDir, mcVersion, tokenFile, relaunch,
+                profilesEnabled, profileDefault, profilePrompt, profileRemember);
     }
 
     /** @return the token, or null when none is configured */
@@ -147,6 +174,33 @@ public record Config(
         }
 
         return fallback;
+    }
+
+    /**
+     * A yes/no setting from the same three sources.
+     *
+     * <p>Anything that is not recognisably a yes or a no falls back to the
+     * default rather than guessing — a typo in {@code profiles.enabled} should
+     * not silently rearrange somebody's mods folder.
+     */
+    private static boolean flag(
+            Map<String, String> flags,
+            Properties file,
+            String flag,
+            String property,
+            String env,
+            boolean fallback) {
+
+        String value = resolve(flags, file, flag, property, env, null);
+        if (value == null) {
+            return fallback;
+        }
+
+        return switch (value.trim().toLowerCase(java.util.Locale.ROOT)) {
+            case "true", "yes", "on", "1" -> true;
+            case "false", "no", "off", "0" -> false;
+            default -> fallback;
+        };
     }
 
     private static String value(Map<String, String> flags, String flag, String env, String fallback) {

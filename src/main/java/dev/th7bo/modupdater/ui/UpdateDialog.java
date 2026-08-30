@@ -105,6 +105,12 @@ public final class UpdateDialog {
         header.setBorder(BorderFactory.createEmptyBorder(18, 20, 14, 20));
         header.add(heading, BorderLayout.WEST);
 
+        // Same window, one extra control — rather than a second dialog the user
+        // has to dismiss before the one they came for.
+        if (model.profilesOffered()) {
+            header.add(ProfilePicker.build(model), BorderLayout.EAST);
+        }
+
         JButton selectAll = new JButton("Select all");
         JButton selectNone = new JButton("Select none");
         JButton update = new JButton("Update and launch");
