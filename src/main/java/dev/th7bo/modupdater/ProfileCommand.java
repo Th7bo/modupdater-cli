@@ -2,15 +2,21 @@ package dev.th7bo.modupdater;
 
 import dev.th7bo.modupdater.instance.InstanceScanner;
 import dev.th7bo.modupdater.instance.ModInventory;
+import dev.th7bo.modupdater.instance.ModPaths;
 import dev.th7bo.modupdater.profile.Profile;
 import dev.th7bo.modupdater.profile.ProfileConfig;
 import dev.th7bo.modupdater.profile.ProfileConfigFile;
 import dev.th7bo.modupdater.profile.ProfileSession;
 import dev.th7bo.modupdater.profile.ProfileState;
 import dev.th7bo.modupdater.profile.ProfileToggle;
+import dev.th7bo.modupdater.setup.InstanceDiscovery;
 import dev.th7bo.modupdater.ui.ManagerWindow;
 import dev.th7bo.modupdater.util.Log;
 
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -36,29 +42,37 @@ final class ProfileCommand {
               group add <group> <mod>...    put mods in a group, creating it if needed
               group remove <group> <mod>... take mods out of a group
               enable                        turn profiles on for this instance
-              disable                       turn them off, putting every stored mod back""";
+              disable                       turn them off, putting every stored mod back
+
+            Asks which instance to act on unless you are standing in one, or
+            name it with --mods-dir /path/to/instance/mods.""";
 
     private ProfileCommand() {
     }
 
     static int run(Config config, String[] args) {
+        Config target = target(config, args);
+        if (target == null) {
+            return 0;
+        }
+
         String subcommand = subcommand(args);
 
         // Turning the feature on and off has to work from whichever side it is
         // currently on, so these come before the enabled check.
         if ("enable".equals(subcommand)) {
-            return enable(config);
+            return enable(target);
         }
         if ("disable".equals(subcommand)) {
-            return disable(config);
+            return disable(target);
         }
         // The window has the on/off switch in it, so it opens either way.
         if ("edit".equals(subcommand)) {
-            ManagerWindow.open(config);
+            ManagerWindow.open(target);
             return 0;
         }
 
-        if (!config.profilesEnabled()) {
+        if (!target.profilesEnabled()) {
             System.out.println("Profiles are switched off for this instance.");
             System.out.println();
             System.out.println("    modupdater profile enable");
@@ -71,18 +85,67 @@ final class ProfileCommand {
             return 0;
         }
 
-        ProfileSession session = ProfileSession.load(config);
+        ProfileSession session = ProfileSession.load(target);
 
         return switch (subcommand) {
             case "list" -> list(session);
             case "current" -> current(session);
-            case "use" -> use(config, session, args);
+            case "use" -> use(target, session, args);
             case "group" -> group(session, args);
             default -> {
                 System.out.println(USAGE);
                 yield 0;
             }
         };
+    }
+
+    /**
+     * The instance to act on, or null when the question could not be answered.
+     *
+     * <p>A launcher hook always names one, and so does anyone standing in their
+     * instance folder. Everyone else gets the menu: {@code modupdater} is on
+     * PATH after an install, so the command is normally run from wherever the
+     * user happens to be, and making them dig out an instance path is the thing
+     * the installer's own menu exists to avoid.
+     */
+    private static Config target(Config config, String[] args) {
+        if (namesInstance(args) || Files.isDirectory(config.modsDir())) {
+            return config;
+        }
+
+        InstancePrompt.Result chosen = InstancePrompt.choose(
+                InstanceDiscovery.forThisMachine().discover(),
+                new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8)),
+                System.out);
+
+        if (!(chosen instanceof InstancePrompt.Result.Chosen picked)) {
+            return null;
+        }
+
+        Config target = Config.resolve(
+                new String[]{"--mods-dir", picked.instance().modsDir().toString()});
+
+        // The log follows the instance, or a profile switch would be recorded in
+        // whatever folder the user was standing in.
+        Log.init(ModPaths.of(target.modsDir()).stateDir(), target.readToken());
+        return target;
+    }
+
+    /** True when the instance was named explicitly, by a hook or by hand. */
+    private static boolean namesInstance(String[] args) {
+        String fromEnv = System.getenv("MODUPDATER_MODS_DIR");
+        if (fromEnv != null && !fromEnv.isBlank()) {
+            return true;
+        }
+        if (args == null) {
+            return false;
+        }
+        for (String arg : args) {
+            if (arg.equals("--mods-dir") || arg.startsWith("--mods-dir=")) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** Both toggles report the same outcomes; only the wording is this class's business. */

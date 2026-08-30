@@ -54,6 +54,11 @@ Ask whoever runs the server for the **server address** and the **access token**.
 
 Nothing else to do — next time you press Play, you'll be asked about any updates.
 
+The installer also puts `modupdater` on your PATH — `~/.local/bin/modupdater` on
+Linux and macOS, the install folder on Windows — so the commands below are just
+`modupdater ...` from any terminal. On Linux and macOS, open a new terminal
+first: the shell you installed from has the old PATH.
+
 ### If your launcher isn't found
 
 The installer looks in the usual locations for Prism, MultiMC and Modrinth App. If you keep instances elsewhere, set it up by hand:
@@ -145,7 +150,21 @@ It is per instance, so the same setup can have it on for a laptop and off for a 
 modupdater profile enable
 ```
 
-That sets `profiles.enabled=true` in the instance's `modupdater.properties` — leaving your comments and everything else in it alone — and writes a starter `mods/.modupdater/profiles.json` with every mod you have in one group. Nothing moves until you split that group up, so enabling it cannot change which mods load.
+Run from anywhere it asks which instance, the same way the installer does — no paths to find:
+
+```
+Which instance?
+
+   1) [Prism] Skyblock New  (MC 1.21.11)
+   2) [Prism] Th7bo  (MC 1.21.6)
+   3) [Modrinth] Fabric 1.21.4  (MC unknown)
+
+Number:
+```
+
+Every `profile` command asks the same question, and none of them asks when the answer is already obvious: you are standing in the instance folder, you have only one instance, or you named it with `--mods-dir /path/to/instance/mods`.
+
+Enabling sets `profiles.enabled=true` in the instance's `modupdater.properties` — leaving your comments and everything else in it alone — and writes a starter `mods/.modupdater/profiles.json` with every mod you have in one group. Nothing moves until you split that group up, so enabling it cannot change which mods load.
 
 `modupdater profile disable` reverses it, and brings any stored mods back into `mods/` first so nothing is left behind. Your `profiles.json` is kept either way.
 
@@ -243,6 +262,8 @@ modupdater profile use mining             # switch without launching
 modupdater profile group add mining coleweight
 modupdater profile group remove base bettermap
 modupdater profile disable                # turn it off, putting every stored mod back
+
+modupdater profile list --mods-dir ~/games/skyblock/mods   # skip the instance question
 ```
 
 Same executable, same launcher hooks — `check` before launch, `apply` after exit, exactly as before. There is no second tool and no extra hook to add.

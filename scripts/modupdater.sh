@@ -29,14 +29,17 @@ fi
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 JAR="${MODUPDATER_JAR:-$HERE/modupdater-cli.jar}"
 
-# Prism exports these; Modrinth App does not, so fall back to the launcher's
-# working directory, which is the instance directory there.
+# Prism exports this; Modrinth App does not, and neither does a shell. Left
+# unset the updater falls back to ./mods on its own — and it has to be unset
+# rather than filled in with "$PWD/mods", because that is how "modupdater
+# profile enable" run from anywhere knows to offer the instance menu instead of
+# acting on a mods folder that does not exist.
 if [ -n "${INST_MC_DIR:-}" ]; then
     MODS_DIR="$INST_MC_DIR/mods"
 elif [ -n "${MODUPDATER_MODS_DIR:-}" ]; then
     MODS_DIR="$MODUPDATER_MODS_DIR"
 else
-    MODS_DIR="$PWD/mods"
+    MODS_DIR=""
 fi
 
 JAVA="${INST_JAVA:-java}"
@@ -46,7 +49,11 @@ if [ ! -f "$JAR" ]; then
     exit 0
 fi
 
-"$JAVA" -jar "$JAR" "$@" --mods-dir "$MODS_DIR"
+if [ -n "$MODS_DIR" ]; then
+    "$JAVA" -jar "$JAR" "$@" --mods-dir "$MODS_DIR"
+else
+    "$JAVA" -jar "$JAR" "$@"
+fi
 STATUS=$?
 
 # 1 means the user chose to cancel the launch; anything else is an updater

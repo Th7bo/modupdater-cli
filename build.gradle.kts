@@ -4,7 +4,7 @@ plugins {
 }
 
 group = "dev.th7bo.modupdater"
-version = "0.3.1"
+version = "0.5.0"
 
 repositories {
     mavenCentral()
