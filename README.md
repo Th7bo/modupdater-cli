@@ -276,6 +276,20 @@ Same executable, same launcher hooks — `check` before launch, `apply` after ex
 - `profile edit` and `profile group` rewrite `profiles.json`, so it comes back pretty-printed. JSON has no comments to lose, but your own indentation is not preserved.
 - Turn it off with `modupdater profile disable` rather than by editing the property: that puts every stored mod back into `mods/` first. Setting `profiles.enabled=false` by hand leaves them where they are, and the game will not load them.
 
+## Updating the updater
+
+```bash
+modupdater update
+```
+
+Checks the [latest release](https://github.com/Th7bo/modupdater-cli/releases/latest), and replaces this program with it if there is a newer one. `modupdater version` says which build you are on.
+
+It updates the updater, not your mods — that is what pressing Play does. Your instances, launcher hooks, token and settings are untouched; it replaces the JAR and the wrapper script, which is what the installer would have done.
+
+Nothing checks for updates on its own. The pre-launch hook runs with the launcher blocked on it and the game waiting, and spending a network round trip there to answer a question nobody asked would make every launch slower.
+
+If it cannot reach GitHub, or the download is not what it claims to be, it says so and changes nothing. Re-running the installer always works and is never wrong.
+
 ## Exit codes
 
 `0` for everything except one case: `1` means **you** chose "Cancel launch" in the dialog.

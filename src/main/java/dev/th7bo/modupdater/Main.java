@@ -79,12 +79,14 @@ public final class Main {
             case "check" -> check(config);
             case "apply" -> apply(config);
             case "profile" -> ProfileCommand.run(config, args);
+            case "update" -> UpdateCommand.run();
+            case "version", "--version" -> UpdateCommand.version();
             case "list-instances" -> listInstances();
             case "install-mod" -> installMod(config, args);
             case "configure-modrinth" -> configureModrinth(config, args);
             default -> {
                 Log.warn("unknown command '" + command
-                        + "', expected 'check', 'apply', 'profile' or 'install-mod'");
+                        + "', expected 'check', 'apply', 'profile', 'update' or 'install-mod'");
                 yield OK;
             }
         };

@@ -121,6 +121,10 @@ tasks.jar {
     manifest {
         attributes["Main-Class"] = application.mainClass.get()
 
+        // What "modupdater update" compares against the latest release. Without
+        // it a build cannot tell whether it is already current.
+        attributes["Implementation-Version"] = project.version.toString()
+
         // sqlite-jdbc loads a native library, which Java 24 and later warn about
         // on every run. Declared here rather than as a command-line flag because
         // --enable-native-access is not a valid option on Java 21, which is the
