@@ -14,6 +14,7 @@ import dev.th7bo.modupdater.ui.ManagerWindow;
 import dev.th7bo.modupdater.util.Log;
 
 import java.io.BufferedReader;
+import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -109,7 +110,7 @@ final class ProfileCommand {
      * the installer's own menu exists to avoid.
      */
     private static Config target(Config config, String[] args) {
-        if (namesInstance(args) || Files.isDirectory(config.modsDir())) {
+        if (namesInstance(args) || looksLikeAnInstance(config.modsDir())) {
             return config;
         }
 
@@ -129,6 +130,36 @@ final class ProfileCommand {
         // whatever folder the user was standing in.
         Log.init(ModPaths.of(target.modsDir()).stateDir(), target.readToken());
         return target;
+    }
+
+    /**
+     * Whether the directory this was run from is really an instance.
+     *
+     * <p>A {@code mods/} folder is not enough to go on. Running the updater
+     * anywhere else leaves a {@code mods/.modupdater} behind for its log, and
+     * that folder then answers this question "yes" for ever — which is how
+     * {@code modupdater profile enable} in a home directory enabled profiles on
+     * the home directory instead of offering the menu.
+     *
+     * <p>A JAR is what makes it an instance. This program only ever manages mods
+     * that are already installed, so a mods folder without one is nothing it can
+     * act on, and the menu is the better answer.
+     */
+    static boolean looksLikeAnInstance(Path modsDir) {
+        return holdsAJar(modsDir) || holdsAJar(ModPaths.of(modsDir).inactiveDir());
+    }
+
+    private static boolean holdsAJar(Path dir) {
+        if (!Files.isDirectory(dir)) {
+            return false;
+        }
+
+        try (var entries = Files.list(dir)) {
+            return entries.anyMatch(path -> path.getFileName().toString().endsWith(".jar")
+                    && Files.isRegularFile(path));
+        } catch (IOException e) {
+            return false;
+        }
     }
 
     /** True when the instance was named explicitly, by a hook or by hand. */
