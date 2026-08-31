@@ -91,6 +91,14 @@ public final class UpdateDialog {
         dialog.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
         dialog.getContentPane().setBackground(Theme.BACKGROUND);
 
+        // Built here rather than beside start(), because the profile picker holds
+        // it while the editor is open.
+        AnswerTimeout timeout = new AnswerTimeout(ANSWER_TIMEOUT_MS, () -> {
+            Log.warn("no answer after " + (ANSWER_TIMEOUT_MS / 1000)
+                    + "s — launching without updating");
+            dialog.dispose();
+        });
+
         ModTableModel tableModel = new ModTableModel(model);
         JTable table = buildTable(tableModel, model);
 
@@ -120,7 +128,7 @@ public final class UpdateDialog {
         // Same window, one extra control — rather than a second dialog the user
         // has to dismiss before the one they came for.
         if (model.profilesOffered()) {
-            header.add(ProfilePicker.build(model, config), BorderLayout.EAST);
+            header.add(ProfilePicker.build(model, config, timeout), BorderLayout.EAST);
         }
 
         JButton selectAll = new JButton("Select all");
@@ -210,12 +218,6 @@ public final class UpdateDialog {
         raise.setRepeats(false);
         raise.start();
 
-        Timer timeout = new Timer(ANSWER_TIMEOUT_MS, e -> {
-            Log.warn("no answer after " + (ANSWER_TIMEOUT_MS / 1000)
-                    + "s — launching without updating");
-            dialog.dispose();
-        });
-        timeout.setRepeats(false);
         timeout.start();
 
         dialog.setVisible(true);
