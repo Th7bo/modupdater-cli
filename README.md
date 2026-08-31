@@ -176,7 +176,7 @@ modupdater profile edit
 
 opens a window: groups and profiles down the left, and whatever you pick on the right. The **Manage…** button beside the profile dropdown in the pre-launch prompt opens the same window, so you can sort things out without cancelling the launch. Selecting a group gives you every installed mod with a tick box and its own icon, which is the quickest way through the first pass over thirty-odd mods. Selecting a profile shows the groups it is built from and, as you tick them, what the profile actually comes to — how many mods end up on, and exactly which ones do not. There is an instance picker at the top and the on/off switch beside it, so one window covers every instance you have.
 
-Nothing is written until you press Save. Opened from the pre-launch prompt it will not apply a profile to the mods folder there and then — the launcher is waiting on the hook, and the profile you pick in the dropdown is applied as the game starts anyway.
+Nothing is written until you press Save. The prompt gives up after two minutes and launches on its own if nobody answers it, but that clock stops while the editor is open — sorting thirty mods into groups is not the same as ignoring the prompt. Opened from the pre-launch prompt the editor will not apply a profile to the mods folder there and then — the launcher is waiting on the hook, and the profile you pick in the dropdown is applied as the game starts anyway.
 
 If you would rather stay at the prompt, the same edits are two commands:
 

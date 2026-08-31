@@ -78,6 +78,14 @@ public final class ProfileDialog {
         dialog.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
         dialog.getContentPane().setBackground(Theme.BACKGROUND);
 
+        // Built here rather than beside start(), because the profile picker holds
+        // it while the editor is open.
+        AnswerTimeout timeout = new AnswerTimeout(ANSWER_TIMEOUT_MS, () -> {
+            Log.warn("no answer after " + (ANSWER_TIMEOUT_MS / 1000)
+                    + "s — launching with the profile already selected");
+            dialog.dispose();
+        });
+
         JLabel title = new JLabel("Which mods do you want this session?");
         title.setFont(title.getFont().deriveFont(Font.BOLD, 16f));
         title.setForeground(Theme.TEXT);
@@ -89,7 +97,7 @@ public final class ProfileDialog {
         subtitle.setBorder(BorderFactory.createEmptyBorder(4, 0, 12, 0));
         subtitle.setAlignmentX(Component.LEFT_ALIGNMENT);
 
-        JPanel picker = ProfilePicker.build(model, config);
+        JPanel picker = ProfilePicker.build(model, config, timeout);
         picker.setAlignmentX(Component.LEFT_ALIGNMENT);
 
         JPanel body = new JPanel();
@@ -142,12 +150,6 @@ public final class ProfileDialog {
         raise.setRepeats(false);
         raise.start();
 
-        Timer timeout = new Timer(ANSWER_TIMEOUT_MS, event -> {
-            Log.warn("no answer after " + (ANSWER_TIMEOUT_MS / 1000)
-                    + "s — launching with the profile already selected");
-            dialog.dispose();
-        });
-        timeout.setRepeats(false);
         timeout.start();
 
         dialog.setVisible(true);

@@ -18,6 +18,7 @@ import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.Font;
 import java.util.List;
+import java.util.function.Consumer;
 
 /**
  * The profile dropdown, shared by both windows that offer one.
@@ -31,10 +32,25 @@ final class ProfilePicker {
     }
 
     /**
-     * @param config the instance being launched, so the Manage button can open the
-     *               editor on it; null leaves the button off
+     * @param config  the instance being launched, so the Manage button can open the
+     *                editor on it; null leaves the button off
+     * @param timeout the prompt's own clock, held while the editor is open; null
+     *                when the prompt has none
      */
-    static JPanel build(DialogViewModel model, Config config) {
+    static JPanel build(DialogViewModel model, Config config, AnswerTimeout timeout) {
+        return build(model, config, timeout,
+                owner -> ManagerWindow.openFrom(owner, config));
+    }
+
+    /**
+     * @param editor what the Manage button opens — the real editor, or a stand-in
+     *               in tests, which cannot wait on a modal window
+     */
+    static JPanel build(
+            DialogViewModel model,
+            Config config,
+            AnswerTimeout timeout,
+            Consumer<java.awt.Window> editor) {
         JLabel caption = new JLabel("Profile");
         caption.setFont(caption.getFont().deriveFont(Font.BOLD, 12f));
         caption.setForeground(Theme.TEXT_MUTED);
@@ -66,9 +82,20 @@ final class ProfilePicker {
             manage.setFont(manage.getFont().deriveFont(11f));
             manage.setBorder(BorderFactory.createEmptyBorder(7, 10, 7, 10));
             manage.setToolTipText("Sort your mods into groups, and build profiles from them");
+            // Held rather than left running: the editor is modal and the timer
+            // would otherwise dispose the prompt underneath it mid-edit, which
+            // launches the game while the user is still sorting their mods.
             manage.addActionListener(event -> {
-                ManagerWindow.openFrom(SwingUtilities.getWindowAncestor(manage), config);
-                reload(model, combo, config);
+                Runnable edit = () -> {
+                    editor.accept(SwingUtilities.getWindowAncestor(manage));
+                    reload(model, combo, config);
+                };
+
+                if (timeout == null) {
+                    edit.run();
+                } else {
+                    timeout.heldFor(edit);
+                }
             });
 
             row.add(Box.createHorizontalStrut(6));
